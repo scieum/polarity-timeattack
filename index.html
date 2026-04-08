@@ -11,6 +11,8 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Supabase JS client (for ranking mode) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css" />
@@ -137,6 +139,37 @@
 
     <script type="text/babel">
       const { useState, useEffect, useMemo, useRef } = React;
+
+      // ======================================================================
+      // Supabase 설정 (랭킹 모드용)
+      // ----------------------------------------------------------------------
+      // 1) https://supabase.com 에서 새 프로젝트를 만든 뒤
+      // 2) Project Settings → API 에서 아래 두 값을 복사해 넣으세요.
+      // 3) SQL Editor 에서 supabase-schema.sql 을 한 번 실행하세요.
+      // ======================================================================
+      const SUPABASE_URL = "YOUR_SUPABASE_URL";
+      const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+
+      const supabaseClient = (SUPABASE_URL && SUPABASE_URL !== "YOUR_SUPABASE_URL")
+        ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+        : null;
+
+      // PIN 을 닉네임과 함께 SHA-256 해시 (간단한 솔트 역할)
+      async function hashPin(nickname, pin) {
+        const text = `polarity-timeattack:${nickname.trim()}:${pin}`;
+        const buf = new TextEncoder().encode(text);
+        const digest = await crypto.subtle.digest('SHA-256', buf);
+        return Array.from(new Uint8Array(digest))
+          .map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+
+      // Supabase RPC 호출 래퍼
+      async function rpc(name, params) {
+        if (!supabaseClient) throw new Error('Supabase 가 설정되지 않았습니다.');
+        const { data, error } = await supabaseClient.rpc(name, params);
+        if (error) throw error;
+        return data;
+      }
 
       // ======================================================================
       // 공통 데이터 및 상수 (한 번만 정의)
@@ -634,6 +667,19 @@
         }
       ];
 
+      // 랭킹 모드용 통합 풀 (상급 5개 풀 + SPECIAL 풀)
+      const RANKING_POOL = [
+        ...ADVANCED_POOL_1, ...ADVANCED_POOL_2, ...ADVANCED_POOL_3,
+        ...ADVANCED_POOL_4, ...ADVANCED_POOL_5, ...SPECIAL_POOL
+      ];
+      const RANKING_QUESTION_COUNT = 8;
+
+      // 랭킹 모드 문제 8개 랜덤 선택 (중복 없음)
+      function pickRankingQuestions() {
+        const shuffled = [...RANKING_POOL].sort(() => Math.random() - 0.5);
+        return shuffled.slice(0, RANKING_QUESTION_COUNT);
+      }
+
       // ======================================================================
       // basicpolarity 퀴즈 데이터
       // ======================================================================
@@ -1127,7 +1173,7 @@
               {data.bonds.map((bond, idx) => {
                 if (userAnswers[bond.id]) return null;
                 
-                if (level === 'advanced') {
+                if (level === 'advanced' || level === 'ranking') {
                   const prevBondSolved = idx === 0 || userAnswers[data.bonds[idx-1].id];
                   if (!prevBondSolved) return null;
                 }
@@ -1370,8 +1416,21 @@
         const [mistakeHistory, setMistakeHistory] = useState([]);
         const timerRef = useRef(null);
 
+        // 랭킹 모드 관련 상태
+        const [gameMode, setGameMode] = useState(null); // 'practice' | 'ranking'
+        const [authNick, setAuthNick] = useState('');
+        const [authPin, setAuthPin] = useState('');
+        const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
+        const [authError, setAuthError] = useState('');
+        const [authBusy, setAuthBusy] = useState(false);
+        const [rankingUser, setRankingUser] = useState(null); // { nickname, pinHash }
+        const [submitResult, setSubmitResult] = useState(null); // submit_score RPC 결과
+        const [topList, setTopList] = useState([]);
+        const [neighbors, setNeighbors] = useState([]);
+        const [leaderboardBusy, setLeaderboardBusy] = useState(false);
+
         useEffect(() => {
-          if (mode === 'quiz' && level === 'advanced' && !completed && !showResult) {
+          if (mode === 'quiz' && (level === 'advanced' || level === 'ranking') && !completed && !showResult) {
             timerRef.current = setInterval(() => {
               setTimer(t => t + 1);
             }, 1000);
@@ -1410,8 +1469,76 @@
             const q5 = ADVANCED_POOL_5.sort(() => 0.5 - Math.random())[0];
             const q6 = SPECIAL_POOL.sort(() => 0.5 - Math.random())[0];
             setQuizList([q1, q2, q3, q4, q5, q6]);
+          } else if (lvl === 'ranking') {
+            setQuizList(pickRankingQuestions());
           }
+          setSubmitResult(null);
         };
+
+        // ================= 랭킹 모드 인증/점수 제출 =================
+        const handleRegister = async () => {
+          setAuthError('');
+          const nick = authNick.trim();
+          if (nick.length < 1 || nick.length > 20) { setAuthError('닉네임은 1~20자여야 합니다.'); return; }
+          if (!/^\d{6}$/.test(authPin)) { setAuthError('식별번호는 숫자 6자리여야 합니다.'); return; }
+          setAuthBusy(true);
+          try {
+            const exists = await rpc('nickname_exists', { p_nickname: nick });
+            if (exists) { setAuthError('이미 사용 중인 닉네임입니다.'); setAuthBusy(false); return; }
+            const pinHash = await hashPin(nick, authPin);
+            await rpc('register_user', { p_nickname: nick, p_pin_hash: pinHash });
+            setRankingUser({ nickname: nick, pinHash });
+            handleLevelSelect('ranking');
+          } catch (e) {
+            setAuthError('등록 실패: ' + (e.message || e));
+          } finally { setAuthBusy(false); }
+        };
+
+        const handleLogin = async () => {
+          setAuthError('');
+          const nick = authNick.trim();
+          if (!nick) { setAuthError('닉네임을 입력하세요.'); return; }
+          if (!/^\d{6}$/.test(authPin)) { setAuthError('식별번호는 숫자 6자리여야 합니다.'); return; }
+          setAuthBusy(true);
+          try {
+            const pinHash = await hashPin(nick, authPin);
+            const userId = await rpc('verify_user', { p_nickname: nick, p_pin_hash: pinHash });
+            if (!userId) { setAuthError('닉네임 또는 식별번호가 일치하지 않습니다.'); setAuthBusy(false); return; }
+            setRankingUser({ nickname: nick, pinHash });
+            handleLevelSelect('ranking');
+          } catch (e) {
+            setAuthError('로그인 실패: ' + (e.message || e));
+          } finally { setAuthBusy(false); }
+        };
+
+        const submitRankingScore = async () => {
+          if (!rankingUser) return;
+          setLeaderboardBusy(true);
+          try {
+            const result = await rpc('submit_score', {
+              p_nickname: rankingUser.nickname,
+              p_pin_hash: rankingUser.pinHash,
+              p_mistakes: mistakeCount,
+              p_time_seconds: timer
+            });
+            setSubmitResult(result && result[0] ? result[0] : null);
+            const [top, nb] = await Promise.all([
+              rpc('get_top_ranking', { p_limit: 10 }),
+              rpc('get_neighbors', { p_nickname: rankingUser.nickname, p_window: 3 })
+            ]);
+            setTopList(top || []);
+            setNeighbors(nb || []);
+          } catch (e) {
+            alert('점수 제출 실패: ' + (e.message || e));
+          } finally { setLeaderboardBusy(false); }
+        };
+
+        // 랭킹 모드에서 퀴즈가 끝나면 자동 제출
+        useEffect(() => {
+          if (completed && level === 'ranking' && rankingUser && !submitResult && !leaderboardBusy) {
+            submitRankingScore();
+          }
+        }, [completed, level]);
 
         const currentQuiz = quizList[step] || {};
 
@@ -1495,24 +1622,108 @@
         };
 
         if (mode === 'menu') {
-          return (
-            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
-              <div className="flex-1 flex flex-col items-center justify-center w-full max-w-md space-y-6">
-                <div className="text-center mb-8">
-                  <h1 className="text-3xl font-black text-slate-900 mb-2 leading-tight">쌍극자 모멘트 방향<br/>상급 타임어택</h1>
-                  <p className="text-slate-500 text-sm mt-2">랜덤 출제되는 6문제를 최대한 빠르게 풀어보세요!</p>
+          // 1단계: 모드 선택
+          if (!gameMode) {
+            return (
+              <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+                <div className="flex-1 flex flex-col items-center justify-center w-full max-w-md space-y-6">
+                  <div className="text-center mb-6">
+                    <h1 className="text-3xl font-black text-slate-900 mb-2 leading-tight">쌍극자 모멘트 방향<br/>타임어택</h1>
+                    <p className="text-slate-500 text-sm mt-2">모드를 선택하세요</p>
+                  </div>
+                  <button onClick={() => setGameMode('practice')} className="w-full max-w-xs bg-slate-600 hover:bg-slate-700 text-white font-bold py-5 rounded-2xl shadow-lg btn-press text-xl flex flex-col items-center">
+                    <span>📚 연습하기</span>
+                    <span className="text-sm font-normal opacity-90 mt-1">6문제 · 기록 저장 안 됨</span>
+                  </button>
+                  <button onClick={() => { setGameMode('ranking'); setAuthMode('login'); setAuthError(''); }} className="w-full max-w-xs bg-purple-500 hover:bg-purple-600 text-white font-bold py-5 rounded-2xl shadow-lg btn-press text-xl flex flex-col items-center relative overflow-hidden">
+                    <div className="absolute top-0 right-0 bg-red-500 text-white text-[10px] px-2 py-1 rounded-bl-lg font-black animate-pulse">RANKING</div>
+                    <span>🏆 랭킹 도전</span>
+                    <span className="text-sm font-normal opacity-90 mt-1">8문제 · 전국 랭킹 등록</span>
+                  </button>
+                  {!supabaseClient && (
+                    <p className="text-xs text-amber-600 text-center max-w-xs">
+                      ⚠ 랭킹 모드를 쓰려면 Supabase 설정이 필요합니다. (README.md 참고)
+                    </p>
+                  )}
                 </div>
-                <button onClick={() => handleLevelSelect('advanced')} className="w-full max-w-xs bg-purple-500 hover:bg-purple-600 text-white font-bold py-5 rounded-2xl shadow-lg btn-press text-xl flex flex-col items-center relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 bg-red-500 text-white text-[10px] px-2 py-1 rounded-bl-lg font-black animate-pulse">TIME ATTACK</div>
-                  <span>🌳 상급 시작</span>
-                  <span className="text-sm font-normal opacity-90">랜덤 출제 + 타임어택 도전!</span>
-                </button>
+                <div className="w-full flex flex-col items-center mt-8 mb-4"><Footer /></div>
               </div>
-              <div className="w-full flex flex-col items-center mt-8 mb-4">
+            );
+          }
+
+          // 2a단계: 연습 모드 → 바로 상급 퀴즈 시작
+          if (gameMode === 'practice') {
+            return (
+              <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+                <div className="flex-1 flex flex-col items-center justify-center w-full max-w-md space-y-6">
+                  <div className="text-center mb-6">
+                    <h1 className="text-2xl font-black text-slate-900 mb-2">📚 연습 모드</h1>
+                    <p className="text-slate-500 text-sm">랜덤 6문제로 부담 없이 연습하세요.</p>
+                  </div>
+                  <button onClick={() => handleLevelSelect('advanced')} className="w-full max-w-xs bg-purple-500 hover:bg-purple-600 text-white font-bold py-5 rounded-2xl shadow-lg btn-press text-xl">
+                    🌳 시작
+                  </button>
+                  <button onClick={() => setGameMode(null)} className="w-full max-w-xs bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-xl shadow-md btn-press">
+                    ← 모드 선택으로
+                  </button>
+                </div>
                 <Footer />
               </div>
-            </div>
-          );
+            );
+          }
+
+          // 2b단계: 랭킹 모드 → 닉네임/식별번호 인증
+          if (gameMode === 'ranking') {
+            return (
+              <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+                <div className="flex-1 flex flex-col items-center justify-center w-full max-w-sm space-y-5">
+                  <div className="text-center mb-2">
+                    <h1 className="text-2xl font-black text-slate-900 mb-1">🏆 랭킹 도전</h1>
+                    <p className="text-slate-500 text-sm">{authMode === 'login' ? '닉네임과 식별번호로 접속' : '새 닉네임 등록'}</p>
+                  </div>
+                  <div className="w-full bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">닉네임 (최대 20자)</label>
+                      <input
+                        type="text" maxLength={20} value={authNick}
+                        onChange={e => setAuthNick(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500"
+                        placeholder="예: 홍길동"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">식별번호 (숫자 6자리)</label>
+                      <input
+                        type="password" inputMode="numeric" maxLength={6} value={authPin}
+                        onChange={e => setAuthPin(e.target.value.replace(/[^0-9]/g, ''))}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono tracking-widest focus:outline-none focus:border-purple-500"
+                        placeholder="••••••"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">※ 잊지 마세요. 재설정 기능은 없습니다.</p>
+                    </div>
+                    {authError && <div className="text-xs text-red-600 bg-red-50 p-2 rounded">{authError}</div>}
+                    <button
+                      onClick={authMode === 'login' ? handleLogin : handleRegister}
+                      disabled={authBusy}
+                      className="w-full bg-purple-500 hover:bg-purple-600 disabled:bg-slate-300 text-white font-bold py-3 rounded-xl shadow btn-press"
+                    >
+                      {authBusy ? '처리 중...' : (authMode === 'login' ? '접속하기' : '등록하고 시작')}
+                    </button>
+                    <button
+                      onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }}
+                      className="w-full text-xs text-purple-600 hover:underline"
+                    >
+                      {authMode === 'login' ? '처음이신가요? 새 닉네임 등록' : '이미 등록했어요 · 접속하기'}
+                    </button>
+                  </div>
+                  <button onClick={() => setGameMode(null)} className="w-full max-w-xs bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-xl shadow-md btn-press">
+                    ← 모드 선택으로
+                  </button>
+                </div>
+                <Footer />
+              </div>
+            );
+          }
         }
 
         if (completed) {
@@ -1521,20 +1732,97 @@
                 <div className="flex-1 p-6 flex flex-col items-center">
                   <div className="text-7xl mb-6 animate-float">🎉</div>
                   <h1 className="text-3xl font-bold text-slate-800 mb-4 text-center">
-                    {level === 'beginner' ? '초급' : level === 'intermediate' ? '중급' : '상급'} 클리어!
+                    {level === 'ranking' ? '🏆 랭킹 도전' : (level === 'beginner' ? '초급' : level === 'intermediate' ? '중급' : '상급')} 클리어!
                   </h1>
                   <p className="text-xl text-slate-600 mb-6 text-center font-bold">
                     훌륭해요!
                   </p>
 
-                  {level === 'advanced' && (
-                    <div className="w-full max-w-xs bg-purple-50 p-4 rounded-xl border border-purple-200 mb-8 space-y-2">
+                  {(level === 'advanced' || level === 'ranking') && (
+                    <div className="w-full max-w-xs bg-purple-50 p-4 rounded-xl border border-purple-200 mb-6 space-y-2">
                       <p className="text-purple-700 font-bold flex justify-between">
                         <span>⏱ 소요 시간:</span> <span className="font-mono text-xl">{formatTime(timer)}</span>
                       </p>
                       <p className="text-red-600 font-bold flex justify-between">
                         <span>💔 실수 횟수:</span> <span className="font-mono text-xl">{mistakeCount}회</span>
                       </p>
+                    </div>
+                  )}
+
+                  {level === 'ranking' && (
+                    <div className="w-full max-w-md mb-6 space-y-4">
+                      {leaderboardBusy && !submitResult && (
+                        <div className="text-center text-slate-500 text-sm">랭킹 불러오는 중...</div>
+                      )}
+                      {submitResult && (
+                        <div className={`p-4 rounded-xl border ${submitResult.updated ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`}>
+                          {submitResult.updated ? (
+                            <div>
+                              <p className="font-bold text-emerald-700 text-lg">🎉 새 기록 달성!</p>
+                              {submitResult.prev_mistakes !== null ? (
+                                <p className="text-xs text-slate-600 mt-1">
+                                  이전: {submitResult.prev_mistakes}실수 · {formatTime(submitResult.prev_time)} →
+                                  <strong className="ml-1">{submitResult.best_mistakes}실수 · {formatTime(submitResult.best_time)}</strong>
+                                </p>
+                              ) : (
+                                <p className="text-xs text-slate-600 mt-1">첫 기록이 등록되었습니다. 앞으로 갱신해 보세요!</p>
+                              )}
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="font-bold text-slate-700">기존 최고 기록이 더 좋아요 💪</p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                최고: <strong>{submitResult.best_mistakes}실수 · {formatTime(submitResult.best_time)}</strong> · 다시 도전해서 깨보세요!
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {topList.length > 0 && (
+                        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                          <div className="p-3 bg-amber-50 border-b border-amber-100 font-bold text-amber-800 flex items-center gap-2">
+                            🏆 명예의 전당 · TOP 10
+                          </div>
+                          <ul className="divide-y divide-slate-100 text-sm">
+                            {topList.map(row => (
+                              <li key={row.rank} className={`flex items-center justify-between px-3 py-2 ${row.nickname === rankingUser?.nickname ? 'bg-purple-50' : ''}`}>
+                                <span className="flex items-center gap-2">
+                                  <span className={`font-mono w-6 text-right ${row.rank <= 3 ? 'text-amber-600 font-bold' : 'text-slate-500'}`}>{row.rank}</span>
+                                  <span className="font-semibold text-slate-800">{row.nickname}</span>
+                                  {row.nickname === rankingUser?.nickname && <span className="text-[10px] bg-purple-500 text-white px-1.5 py-0.5 rounded">나</span>}
+                                </span>
+                                <span className="font-mono text-xs text-slate-600">
+                                  {row.mistakes}실수 · {formatTime(row.time_seconds)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {neighbors.length > 0 && (
+                        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                          <div className="p-3 bg-purple-50 border-b border-purple-100 font-bold text-purple-800 flex items-center justify-between">
+                            <span>📍 내 위치</span>
+                            <span className="text-xs font-normal text-purple-600">
+                              {neighbors[0]?.my_rank}위 / {neighbors[0]?.total}명
+                            </span>
+                          </div>
+                          <ul className="divide-y divide-slate-100 text-sm">
+                            {neighbors.map(row => (
+                              <li key={row.rank} className={`flex items-center justify-between px-3 py-2 ${row.is_me ? 'bg-purple-100' : ''}`}>
+                                <span className="flex items-center gap-2">
+                                  <span className="font-mono w-6 text-right text-slate-500">{row.rank}</span>
+                                  <span className={`font-semibold ${row.is_me ? 'text-purple-700' : 'text-slate-800'}`}>{row.nickname}</span>
+                                  {row.is_me && <span className="text-[10px] bg-purple-500 text-white px-1.5 py-0.5 rounded">나</span>}
+                                </span>
+                                <span className="font-mono text-xs text-slate-600">
+                                  {row.mistakes}실수 · {formatTime(row.time_seconds)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1565,14 +1853,11 @@
                   </div>
 
                   <div className="flex gap-4 w-full max-w-sm mx-auto mt-auto mb-6">
-                    <button onClick={() => setMode('menu')} className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-4 rounded-2xl shadow-md btn-press">
-                      ← 이전 화면으로
-                    </button>
-                    <button onClick={goHome} className="flex-1 bg-slate-300 hover:bg-slate-400 text-slate-700 font-bold py-4 rounded-2xl shadow-md btn-press">
-                      메인 메뉴로
+                    <button onClick={() => { setMode('menu'); setGameMode(null); setSubmitResult(null); setTopList([]); setNeighbors([]); }} className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-4 rounded-2xl shadow-md btn-press">
+                      ← 모드 선택으로
                     </button>
                     <button onClick={resetGame} className="flex-1 bg-brand-500 hover:bg-brand-600 text-white font-bold py-4 rounded-2xl shadow-lg btn-press">
-                      다시하기
+                      다시 도전
                     </button>
                   </div>
                   <Footer />
@@ -1639,17 +1924,14 @@
             <header className="px-3 py-3 bg-white shadow-sm flex justify-between items-center z-10 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setMode('menu')} className="p-2 -ml-2 rounded-full hover:bg-slate-100 text-slate-500 btn-press" title="이전 화면으로">
+                  <button onClick={() => { setMode('menu'); setGameMode(null); setSubmitResult(null); }} className="p-2 -ml-2 rounded-full hover:bg-slate-100 text-slate-500 btn-press" title="모드 선택으로">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                  </button>
-                  <button onClick={goHome} className="p-2 rounded-full hover:bg-slate-100 text-slate-500 btn-press" title="메인 메뉴로">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                   </button>
                 </div>
                 <div>
                   <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    {level === 'beginner' ? '초급' : level === 'intermediate' ? '중급' : '상급'}
-                    {level === 'advanced' && (
+                    {level === 'ranking' ? '🏆 랭킹' : (level === 'beginner' ? '초급' : level === 'intermediate' ? '중급' : '상급')}
+                    {(level === 'advanced' || level === 'ranking') && (
                       <span className={`font-mono text-base px-2 py-0.5 rounded ${showResult ? 'bg-slate-200 text-slate-500' : 'bg-red-100 text-red-600 animate-pulse-red'}`}>
                         {showResult ? 'PAUSED' : formatTime(timer)}
                       </span>
