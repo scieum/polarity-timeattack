@@ -1546,6 +1546,7 @@
         const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
         const [modalTopList, setModalTopList] = useState([]);
         const [modalBusy, setModalBusy] = useState(false);
+        const [modalScope, setModalScope] = useState('all'); // 'all' | 'school'
 
         // 학교 검색 상태 (등록 플로우)
         const [regSchoolKind, setRegSchoolKind] = useState('고등학교');
@@ -1633,7 +1634,7 @@
               p_pin_hash: pinHash,
               p_school_name: regSchoolSelected.name
             });
-            setRankingUser({ nickname: nick, pinHash });
+            setRankingUser({ nickname: nick, pinHash, schoolName: regSchoolSelected.name });
             handleLevelSelect('ranking');
           } catch (e) {
             setAuthError('등록 실패: ' + (e.message || JSON.stringify(e)));
@@ -1648,9 +1649,9 @@
           setAuthBusy(true);
           try {
             const pinHash = await hashPin(nick, authPin);
-            const userId = await rpc('verify_user', { p_nickname: nick, p_pin_hash: pinHash });
-            if (!userId) { setAuthError('닉네임 또는 식별번호가 일치하지 않습니다.'); setAuthBusy(false); return; }
-            setRankingUser({ nickname: nick, pinHash });
+            const profile = await rpc('verify_user', { p_nickname: nick, p_pin_hash: pinHash });
+            if (!profile || !profile.id) { setAuthError('닉네임 또는 식별번호가 일치하지 않습니다.'); setAuthBusy(false); return; }
+            setRankingUser({ nickname: nick, pinHash, schoolName: profile.school_name || null });
             handleLevelSelect('ranking');
           } catch (e) {
             setAuthError('로그인 실패: ' + (e.message || e));
@@ -1683,16 +1684,30 @@
           } finally { setLeaderboardBusy(false); }
         };
 
-        const openLeaderboardModal = async () => {
-          setShowLeaderboardModal(true);
+        const loadLeaderboard = async (scope) => {
           setModalBusy(true);
           try {
-            const top = await rpc('get_top_ranking', { p_limit: 20 });
+            const params = { p_limit: 20, p_school: null };
+            if (scope === 'school' && rankingUser && rankingUser.schoolName) {
+              params.p_school = rankingUser.schoolName;
+            }
+            const top = await rpc('get_top_ranking', params);
             setModalTopList(top || []);
           } catch (e) {
             console.error('[get_top_ranking]', e);
             alert('랭킹 불러오기 실패: ' + (e.message || JSON.stringify(e)));
           } finally { setModalBusy(false); }
+        };
+
+        const openLeaderboardModal = async () => {
+          setShowLeaderboardModal(true);
+          setModalScope('all');
+          await loadLeaderboard('all');
+        };
+
+        const switchModalScope = async (scope) => {
+          setModalScope(scope);
+          await loadLeaderboard(scope);
         };
 
         // 랭킹 모드 수동 제출: 버튼 클릭 → 점수 제출 후 리더보드 모달 오픈
@@ -1791,13 +1806,28 @@
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-pop">
               <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
                 <div className="p-5 border-b border-slate-200 text-center">
-                  <h2 className="font-black text-2xl text-slate-800">🏆 랭킹 보드</h2>
+                  <h2 className="font-bold text-2xl text-slate-900 tracking-tight">랭킹 보드</h2>
                   <p className="text-xs text-slate-500 mt-1">상위 20명의 기록</p>
+                </div>
+                <div className="px-4 pt-4 pb-2 bg-slate-50 flex gap-2">
+                  <button onClick={() => switchModalScope('all')}
+                    className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-colors ${modalScope === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}>
+                    전체
+                  </button>
+                  <button
+                    onClick={() => switchModalScope('school')}
+                    disabled={!rankingUser || !rankingUser.schoolName}
+                    title={!rankingUser ? '랭킹 도전으로 로그인 후 이용 가능' : (!rankingUser.schoolName ? '학교 정보가 없는 계정입니다' : '')}
+                    className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${modalScope === 'school' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}>
+                    우리 학교 {rankingUser && rankingUser.schoolName && <span className="text-[10px] font-normal">· {rankingUser.schoolName}</span>}
+                  </button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50">
                   {modalBusy && <div className="text-center text-slate-500 text-sm py-8">불러오는 중...</div>}
                   {!modalBusy && modalTopList.length === 0 && (
-                    <div className="text-center text-slate-400 text-sm py-8">아직 등록된 기록이 없습니다.</div>
+                    <div className="text-center text-slate-400 text-sm py-8">
+                      {modalScope === 'school' ? '우리 학교 기록이 아직 없습니다.' : '아직 등록된 기록이 없습니다.'}
+                    </div>
                   )}
                   {!modalBusy && modalTopList.map(row => (
                     <LeaderboardRow key={row.rank} row={row} isMe={rankingUser && row.nickname === rankingUser.nickname} formatTime={formatTime} />
