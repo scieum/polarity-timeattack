@@ -146,7 +146,7 @@
         theme: {
           extend: {
             colors: {
-              brand: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 900: '#0c4a6e' },
+              brand: { 50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 500: '#0f172a', 600: '#020617', 700: '#020617', 900: '#020617' },
             }
           }
         }
@@ -1824,13 +1824,13 @@
                     <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight tracking-tight">타임어택</h2>
                     <p className="text-slate-500 text-sm mt-3 font-medium">모드를 선택하세요</p>
                   </div>
-                  <button onClick={() => setGameMode('practice')} className="w-full border border-slate-200 hover:border-slate-300 bg-white text-slate-900 font-semibold py-4 rounded-xl btn-press text-left px-5 flex items-center justify-between">
-                    <span>연습하기</span>
-                    <span className="text-xs text-slate-400 font-normal">6문제</span>
+                  <button onClick={() => setGameMode('practice')} className="w-full border border-slate-200 hover:border-slate-300 bg-white text-slate-900 rounded-2xl btn-press text-left px-6 py-7 flex flex-col gap-1">
+                    <span className="text-lg font-semibold">연습하기</span>
+                    <span className="text-xs text-slate-400 font-normal">6문제 · 기록 저장 안 됨</span>
                   </button>
-                  <button onClick={() => { setGameMode('ranking'); setAuthMode('login'); setAuthError(''); }} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-4 rounded-xl btn-press text-left px-5 flex items-center justify-between">
-                    <span>랭킹 도전</span>
-                    <span className="text-xs text-slate-300 font-normal">8문제 · 전국 랭킹</span>
+                  <button onClick={() => { setGameMode('ranking'); setAuthMode('login'); setAuthError(''); }} className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-2xl btn-press text-left px-6 py-7 flex flex-col gap-1">
+                    <span className="text-lg font-semibold">랭킹 도전</span>
+                    <span className="text-xs text-slate-300 font-normal">8문제 · 전국 랭킹 등록</span>
                   </button>
                   <button onClick={openLeaderboardModal} className="w-full text-slate-500 hover:text-slate-900 text-sm font-medium py-3 btn-press">
                     랭킹 보드 보기 →
@@ -1975,49 +1975,50 @@
 
         if (completed) {
           return (
-            <div className="flex flex-col min-h-screen bg-slate-50">
+            <div className="flex flex-col min-h-screen bg-white">
                 <LeaderboardModal />
                 <div className="flex-1 p-6 flex flex-col items-center">
-                  <div className="text-7xl mb-6 animate-float">🎉</div>
-                  <h1 className="text-3xl font-bold text-slate-800 mb-4 text-center">
-                    {level === 'ranking' ? '🏆 랭킹 도전' : (level === 'beginner' ? '초급' : level === 'intermediate' ? '중급' : '상급')} 클리어!
+                  <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-6 mb-2 text-center tracking-tight">
+                    {level === 'ranking' ? '랭킹 도전' : (level === 'beginner' ? '초급' : level === 'intermediate' ? '중급' : '상급')} 클리어
                   </h1>
-                  <p className="text-xl text-slate-600 mb-6 text-center font-bold">
-                    훌륭해요!
+                  <p className="text-sm text-slate-500 mb-8 text-center font-medium">
+                    훌륭해요
                   </p>
 
                   {(level === 'advanced' || level === 'ranking') && (
-                    <div className="w-full max-w-xs bg-purple-50 p-4 rounded-xl border border-purple-200 mb-6 space-y-2">
-                      <p className="text-purple-700 font-bold flex justify-between">
-                        <span>⏱ 소요 시간:</span> <span className="font-mono text-xl">{formatTime(timer)}</span>
-                      </p>
-                      <p className="text-red-600 font-bold flex justify-between">
-                        <span>💔 실수 횟수:</span> <span className="font-mono text-xl">{mistakeCount}회</span>
-                      </p>
+                    <div className="w-full max-w-xs border border-slate-200 rounded-xl p-5 mb-6">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                        <span className="text-sm font-medium text-slate-500">소요 시간</span>
+                        <span className="font-mono text-lg font-semibold text-slate-900">{formatTime(timer)}</span>
+                      </div>
+                      <div className="flex items-center justify-between pt-3">
+                        <span className="text-sm font-medium text-slate-500">실수 횟수</span>
+                        <span className="font-mono text-lg font-semibold text-slate-900">{mistakeCount}회</span>
+                      </div>
                     </div>
                   )}
 
                   {level === 'ranking' && (
                     <div className="w-full max-w-xs mb-6 space-y-3">
                       {submitResult ? (
-                        <div className={`p-4 rounded-xl border text-center ${submitResult.updated ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`}>
+                        <div className="p-4 rounded-xl border border-slate-200 text-center">
                           {submitResult.updated ? (
                             <div>
-                              <p className="font-bold text-emerald-700 text-lg">🎉 새 기록 달성!</p>
+                              <p className="font-semibold text-slate-900">새 기록 달성</p>
                               {submitResult.prev_mistakes !== null ? (
-                                <p className="text-xs text-slate-600 mt-1">
-                                  이전: {submitResult.prev_mistakes}실수 · {formatTime(submitResult.prev_time)} →
-                                  <strong className="ml-1">{submitResult.best_mistakes}실수 · {formatTime(submitResult.best_time)}</strong>
+                                <p className="text-xs text-slate-500 mt-1">
+                                  이전 {submitResult.prev_mistakes}실수·{formatTime(submitResult.prev_time)} →
+                                  <span className="ml-1 font-semibold text-slate-900">{submitResult.best_mistakes}실수·{formatTime(submitResult.best_time)}</span>
                                 </p>
                               ) : (
-                                <p className="text-xs text-slate-600 mt-1">첫 기록이 등록되었습니다!</p>
+                                <p className="text-xs text-slate-500 mt-1">첫 기록이 등록되었습니다</p>
                               )}
                             </div>
                           ) : (
                             <div>
-                              <p className="font-bold text-slate-700">기존 최고 기록이 더 좋아요 💪</p>
+                              <p className="font-semibold text-slate-900">기존 최고 기록이 더 좋아요</p>
                               <p className="text-xs text-slate-500 mt-1">
-                                최고: <strong>{submitResult.best_mistakes}실수 · {formatTime(submitResult.best_time)}</strong>
+                                최고 <span className="font-semibold text-slate-900">{submitResult.best_mistakes}실수·{formatTime(submitResult.best_time)}</span>
                               </p>
                             </div>
                           )}
@@ -2035,37 +2036,37 @@
                     </div>
                   )}
 
-                  <div className="w-full max-w-md clean-panel overflow-hidden mb-8">
-                    <div className="p-4 bg-slate-100 font-bold text-slate-700 border-b border-slate-200 flex items-center gap-2">
-                        <span>📝 출제 문항 다시보기</span>
+                  <div className="w-full max-w-md border border-slate-200 rounded-xl overflow-hidden mb-8">
+                    <div className="p-4 font-semibold text-slate-900 border-b border-slate-100 text-sm">
+                      출제 문항 다시보기
                     </div>
                     <div className="divide-y divide-slate-100">
                       {quizList.map((quiz, idx) => {
                         const hasMistake = hasMistakeInQuiz(idx);
                         return (
-                          <button 
+                          <button
                             key={quiz.id}
                             onClick={() => setReviewIndex(idx)}
                             className="w-full p-4 text-left hover:bg-slate-50 flex justify-between items-center transition-colors"
                           >
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-800">Q{idx + 1}. {quiz.name} <span className="text-slate-400 text-sm font-normal">({quiz.formula})</span></span>
+                              <span className="font-semibold text-slate-900">Q{idx + 1}. {quiz.name} <span className="text-slate-400 text-sm font-normal">({quiz.formula})</span></span>
                               {hasMistake && (
-                                <span className="text-red-600 text-xs font-bold bg-red-50 px-2 py-0.5 rounded">실수 있음</span>
+                                <span className="text-slate-500 text-[11px] font-medium bg-slate-100 px-1.5 py-0.5 rounded">실수 있음</span>
                               )}
                             </div>
-                            <span className="text-brand-500 text-sm font-bold bg-brand-50 px-2 py-1 rounded">해설 보기</span>
+                            <span className="text-slate-500 text-xs font-medium">해설 →</span>
                           </button>
                         );
                       })}
                     </div>
                   </div>
 
-                  <div className="flex gap-4 w-full max-w-sm mx-auto mt-auto mb-6">
-                    <button onClick={() => { setMode('menu'); setGameMode(null); setSubmitResult(null); setTopList([]); setNeighbors([]); }} className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-4 rounded-2xl shadow-md btn-press">
-                      ← 모드 선택으로
+                  <div className="flex gap-3 w-full max-w-sm mx-auto mt-auto mb-6">
+                    <button onClick={() => { setMode('menu'); setGameMode(null); setSubmitResult(null); setTopList([]); setNeighbors([]); }} className="flex-1 border border-slate-200 hover:border-slate-300 bg-white text-slate-900 font-semibold py-3.5 rounded-xl btn-press">
+                      모드 선택으로
                     </button>
-                    <button onClick={resetGame} className="flex-1 bg-brand-500 hover:bg-brand-600 text-white font-bold py-4 rounded-2xl shadow-lg btn-press">
+                    <button onClick={resetGame} className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3.5 rounded-xl btn-press">
                       다시 도전
                     </button>
                   </div>
@@ -2129,8 +2130,8 @@
         }
 
         return (
-          <div className="flex flex-col min-h-screen bg-slate-50 relative">
-            <header className="px-2 sm:px-3 py-2 sm:py-3 bg-white shadow-sm flex justify-between items-center gap-2 z-10 shrink-0">
+          <div className="flex flex-col min-h-screen bg-white relative">
+            <header className="px-2 sm:px-3 py-2 sm:py-3 bg-white border-b border-slate-100 flex justify-between items-center gap-2 z-10 shrink-0">
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <button onClick={() => { setMode('menu'); setGameMode(null); setSubmitResult(null); }} className="p-2 -ml-1 rounded-full hover:bg-slate-100 text-slate-500 btn-press shrink-0" title="모드 선택으로">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
@@ -2151,14 +2152,14 @@
                 <button
                     onClick={() => setShowGuide(true)}
                     title="힌트 - 원리"
-                    className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 px-2 sm:px-3 py-2 rounded-lg font-bold flex items-center gap-1 shadow-sm hover:shadow"
+                    className="text-xs bg-white border border-slate-200 hover:border-slate-300 text-slate-700 px-2 sm:px-3 py-2 rounded-lg font-semibold flex items-center gap-1"
                 >
                     <span>📘</span><span className="hidden sm:inline">힌트-원리</span>
                 </button>
                 <button
                     onClick={() => setShowTable(true)}
                     title="힌트 - 전기음성도 표"
-                    className="text-xs bg-brand-50 border border-brand-200 text-brand-700 px-2 sm:px-3 py-2 rounded-lg font-bold flex items-center gap-1 shadow-sm hover:shadow hover:bg-brand-100"
+                    className="text-xs bg-white border border-slate-200 hover:border-slate-300 text-slate-700 px-2 sm:px-3 py-2 rounded-lg font-semibold flex items-center gap-1"
                 >
                     <span>📊</span><span className="hidden sm:inline">힌트-전기음성도 표</span>
                 </button>
@@ -2232,25 +2233,26 @@
               )}
             </main>
 
-            <footer className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] safe-area-bottom flex gap-3">
+            <footer className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-100 safe-area-bottom flex gap-3">
               {step > 0 && (
-                <button 
+                <button
                   onClick={prevStep}
-                  className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-lg font-bold py-4 rounded-2xl shadow-md btn-press"
+                  className="flex-1 border border-slate-200 hover:border-slate-300 bg-white text-slate-900 text-base font-semibold py-3.5 rounded-xl btn-press"
                 >
                   이전
                 </button>
               )}
 
               {showResult ? (
-                <button 
+                <button
                   onClick={nextStep}
-                  className="flex-[2] bg-brand-600 hover:bg-brand-700 text-white text-lg font-bold py-4 rounded-2xl shadow-lg btn-press flex items-center justify-center gap-2 animate-pop"
+                  className="flex-[2] bg-slate-900 hover:bg-slate-800 text-white text-base font-semibold py-3.5 rounded-xl btn-press flex items-center justify-center gap-2"
                 >
-                  다음 문제로 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  다음 문제로
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </button>
               ) : (
-                <div className="flex-[2] bg-slate-100 text-slate-400 text-base font-bold py-4 rounded-2xl flex items-center justify-center border border-slate-200">
+                <div className="flex-[2] bg-slate-50 text-slate-400 text-sm font-medium py-3.5 rounded-xl flex items-center justify-center border border-slate-200">
                   모든 결합을 확인하세요
                 </div>
               )}
