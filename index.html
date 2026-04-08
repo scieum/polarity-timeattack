@@ -173,8 +173,101 @@
       async function rpc(name, params) {
         if (!supabaseClient) throw new Error('Supabase 가 설정되지 않았습니다.');
         const { data, error } = await supabaseClient.rpc(name, params);
-        if (error) throw error;
+        if (error) {
+          console.error('[rpc ' + name + ']', error);
+          throw error;
+        }
         return data;
+      }
+
+      // ================= NEIS 학교 검색 =================
+      // NEIS Open API 는 KEY 없이도 저용량 호출이 가능합니다.
+      // 키가 있으면 NEIS_API_KEY 에 넣으세요 (선택).
+      const NEIS_API_KEY = "";
+      const NEIS_REGIONS = [
+        { code: 'B10', name: '서울' },   { code: 'C10', name: '부산' },
+        { code: 'D10', name: '대구' },   { code: 'E10', name: '인천' },
+        { code: 'F10', name: '광주' },   { code: 'G10', name: '대전' },
+        { code: 'H10', name: '울산' },   { code: 'I10', name: '세종' },
+        { code: 'J10', name: '경기' },   { code: 'K10', name: '강원' },
+        { code: 'M10', name: '충북' },   { code: 'N10', name: '충남' },
+        { code: 'P10', name: '전북' },   { code: 'Q10', name: '전남' },
+        { code: 'R10', name: '경북' },   { code: 'S10', name: '경남' },
+        { code: 'T10', name: '제주' }
+      ];
+      const NEIS_SCHOOL_KINDS = ['고등학교', '중학교', '초등학교'];
+
+      async function fetchSchools(regionCode, kind, searchText) {
+        const url = new URL('https://open.neis.go.kr/hub/schoolInfo');
+        url.searchParams.set('Type', 'json');
+        url.searchParams.set('pIndex', '1');
+        url.searchParams.set('pSize', '200');
+        url.searchParams.set('ATPT_OFCDC_SC_CODE', regionCode);
+        url.searchParams.set('SCHUL_KND_SC_NM', kind);
+        if (searchText && searchText.trim()) {
+          url.searchParams.set('SCHUL_NM', searchText.trim());
+        }
+        if (NEIS_API_KEY) url.searchParams.set('KEY', NEIS_API_KEY);
+        const res = await fetch(url.toString());
+        if (!res.ok) throw new Error('NEIS 요청 실패 (' + res.status + ')');
+        const json = await res.json();
+        if (!json.schoolInfo || !json.schoolInfo[1] || !json.schoolInfo[1].row) return [];
+        return json.schoolInfo[1].row.map(r => ({
+          code: r.SD_SCHUL_CODE,
+          name: r.SCHUL_NM,
+          address: r.ORG_RDNMA || ''
+        }));
+      }
+
+      // 리더보드 한 행 컴포넌트 (참조 이미지 스타일)
+      function LeaderboardRow({ row, isMe, formatTime }) {
+        const rank = row.rank;
+        const medalMap = { 1: '🥇', 2: '🥈', 3: '🥉' };
+        const bgMap = {
+          1: 'bg-amber-50 border-amber-200',
+          2: 'bg-slate-50 border-slate-300',
+          3: 'bg-orange-50 border-orange-200'
+        };
+        const rowClass = isMe
+          ? 'bg-purple-100 border-purple-300'
+          : (bgMap[rank] || 'bg-white border-slate-200');
+        return (
+          <div className={`flex items-center gap-3 px-4 py-3 border rounded-xl ${rowClass}`}>
+            <div className="shrink-0 w-10 h-10 rounded-full bg-white border border-slate-200 flex flex-col items-center justify-center shadow-sm">
+              {medalMap[rank] ? (
+                <>
+                  <span className="text-lg leading-none">{medalMap[rank]}</span>
+                  <span className="text-[9px] font-bold text-slate-500">{rank}</span>
+                </>
+              ) : (
+                <span className="text-sm font-bold text-slate-500">{rank}</span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-slate-800 flex items-center gap-1 truncate">
+                <span className="truncate">{row.nickname || '익명'}</span>
+                {isMe && <span className="text-[10px] bg-purple-500 text-white px-1.5 py-0.5 rounded">나</span>}
+              </div>
+              <div className="text-xs text-slate-500 truncate">{row.school_name || '학교 미등록'}</div>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="text-lg font-extrabold text-slate-800 leading-none">{row.mistakes}<span className="text-xs font-bold text-slate-500 ml-1">실수</span></div>
+              <div className="text-xs font-mono text-slate-500 mt-0.5">{formatTime(row.time_seconds)}</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">{relativeTime(row.updated_at)}</div>
+            </div>
+          </div>
+        );
+      }
+
+      function relativeTime(iso) {
+        if (!iso) return '';
+        const then = new Date(iso).getTime();
+        const sec = Math.floor((Date.now() - then) / 1000);
+        if (sec < 60) return '방금 전';
+        if (sec < 3600) return Math.floor(sec / 60) + '분 전';
+        if (sec < 86400) return Math.floor(sec / 3600) + '시간 전';
+        if (sec < 2592000) return Math.floor(sec / 86400) + '일 전';
+        return Math.floor(sec / 2592000) + '개월 전';
       }
 
       // ======================================================================
@@ -1430,10 +1523,36 @@
         const [authError, setAuthError] = useState('');
         const [authBusy, setAuthBusy] = useState(false);
         const [rankingUser, setRankingUser] = useState(null); // { nickname, pinHash }
-        const [submitResult, setSubmitResult] = useState(null); // submit_score RPC 결과
+        const [submitResult, setSubmitResult] = useState(null);
         const [topList, setTopList] = useState([]);
         const [neighbors, setNeighbors] = useState([]);
         const [leaderboardBusy, setLeaderboardBusy] = useState(false);
+        const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
+        const [modalTopList, setModalTopList] = useState([]);
+        const [modalBusy, setModalBusy] = useState(false);
+
+        // 학교 검색 상태 (등록 플로우)
+        const [regSchoolKind, setRegSchoolKind] = useState('고등학교');
+        const [regRegion, setRegRegion] = useState('');
+        const [regSchoolQuery, setRegSchoolQuery] = useState('');
+        const [regSchoolList, setRegSchoolList] = useState([]);
+        const [regSchoolBusy, setRegSchoolBusy] = useState(false);
+        const [regSchoolSelected, setRegSchoolSelected] = useState(null); // { code, name }
+        const [regSchoolError, setRegSchoolError] = useState('');
+
+        const searchSchools = async () => {
+          if (!regRegion) { setRegSchoolError('시/도를 먼저 선택하세요.'); return; }
+          if (!regSchoolQuery.trim()) { setRegSchoolError('학교명을 입력하세요.'); return; }
+          setRegSchoolError('');
+          setRegSchoolBusy(true);
+          try {
+            const list = await fetchSchools(regRegion, regSchoolKind, regSchoolQuery);
+            setRegSchoolList(list);
+            if (list.length === 0) setRegSchoolError('검색 결과가 없습니다.');
+          } catch (e) {
+            setRegSchoolError('검색 실패: ' + (e.message || e));
+          } finally { setRegSchoolBusy(false); }
+        };
 
         useEffect(() => {
           if (mode === 'quiz' && (level === 'advanced' || level === 'ranking') && !completed && !showResult) {
@@ -1487,16 +1606,21 @@
           const nick = authNick.trim();
           if (nick.length < 1 || nick.length > 20) { setAuthError('닉네임은 1~20자여야 합니다.'); return; }
           if (!/^\d{6}$/.test(authPin)) { setAuthError('식별번호는 숫자 6자리여야 합니다.'); return; }
+          if (!regSchoolSelected) { setAuthError('학교를 선택하세요.'); return; }
           setAuthBusy(true);
           try {
             const exists = await rpc('nickname_exists', { p_nickname: nick });
             if (exists) { setAuthError('이미 사용 중인 닉네임입니다.'); setAuthBusy(false); return; }
             const pinHash = await hashPin(nick, authPin);
-            await rpc('register_user', { p_nickname: nick, p_pin_hash: pinHash });
+            await rpc('register_user', {
+              p_nickname: nick,
+              p_pin_hash: pinHash,
+              p_school_name: regSchoolSelected.name
+            });
             setRankingUser({ nickname: nick, pinHash });
             handleLevelSelect('ranking');
           } catch (e) {
-            setAuthError('등록 실패: ' + (e.message || e));
+            setAuthError('등록 실패: ' + (e.message || JSON.stringify(e)));
           } finally { setAuthBusy(false); }
         };
 
@@ -1527,16 +1651,31 @@
               p_mistakes: mistakeCount,
               p_time_seconds: timer
             });
-            setSubmitResult(result && result[0] ? result[0] : null);
+            // v2 returns jsonb object directly
+            setSubmitResult(result || null);
             const [top, nb] = await Promise.all([
-              rpc('get_top_ranking', { p_limit: 10 }),
+              rpc('get_top_ranking', { p_limit: 20 }),
               rpc('get_neighbors', { p_nickname: rankingUser.nickname, p_window: 3 })
             ]);
             setTopList(top || []);
             setNeighbors(nb || []);
           } catch (e) {
-            alert('점수 제출 실패: ' + (e.message || e));
+            console.error('[submit_score]', e);
+            const msg = e.message || e.hint || e.details || JSON.stringify(e);
+            alert('점수 제출 실패: ' + msg);
           } finally { setLeaderboardBusy(false); }
+        };
+
+        const openLeaderboardModal = async () => {
+          setShowLeaderboardModal(true);
+          setModalBusy(true);
+          try {
+            const top = await rpc('get_top_ranking', { p_limit: 20 });
+            setModalTopList(top || []);
+          } catch (e) {
+            console.error('[get_top_ranking]', e);
+            alert('랭킹 불러오기 실패: ' + (e.message || JSON.stringify(e)));
+          } finally { setModalBusy(false); }
         };
 
         // 랭킹 모드에서 퀴즈가 끝나면 자동 제출
@@ -1627,11 +1766,41 @@
           handleLevelSelect(level);
         };
 
+        // 공통 리더보드 모달 (메뉴에서 버튼으로 열림)
+        const LeaderboardModal = () => (
+          showLeaderboardModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-pop">
+              <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+                <div className="p-5 border-b border-slate-200 text-center">
+                  <h2 className="font-black text-2xl text-slate-800">🏆 랭킹 보드</h2>
+                  <p className="text-xs text-slate-500 mt-1">상위 20명의 기록</p>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50">
+                  {modalBusy && <div className="text-center text-slate-500 text-sm py-8">불러오는 중...</div>}
+                  {!modalBusy && modalTopList.length === 0 && (
+                    <div className="text-center text-slate-400 text-sm py-8">아직 등록된 기록이 없습니다.</div>
+                  )}
+                  {!modalBusy && modalTopList.map(row => (
+                    <LeaderboardRow key={row.rank} row={row} isMe={rankingUser && row.nickname === rankingUser.nickname} formatTime={formatTime} />
+                  ))}
+                </div>
+                <div className="p-4 border-t border-slate-200">
+                  <button onClick={() => setShowLeaderboardModal(false)}
+                    className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg btn-press">
+                    닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        );
+
         if (mode === 'menu') {
           // 1단계: 모드 선택
           if (!gameMode) {
             return (
               <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+                <LeaderboardModal />
                 <div className="flex-1 flex flex-col items-center justify-center w-full max-w-md space-y-6">
                   <div className="text-center mb-6">
                     <h1 className="text-3xl font-black text-slate-900 mb-2 leading-tight">쌍극자 모멘트 방향<br/>타임어택</h1>
@@ -1645,6 +1814,9 @@
                     <div className="absolute top-0 right-0 bg-red-500 text-white text-[10px] px-2 py-1 rounded-bl-lg font-black animate-pulse">RANKING</div>
                     <span>🏆 랭킹 도전</span>
                     <span className="text-sm font-normal opacity-90 mt-1">8문제 · 전국 랭킹 등록</span>
+                  </button>
+                  <button onClick={openLeaderboardModal} className="w-full max-w-xs bg-amber-400 hover:bg-amber-500 text-amber-900 font-bold py-3 rounded-xl shadow btn-press">
+                    🏅 랭킹 보드 보기
                   </button>
                   {!supabaseClient && (
                     <p className="text-xs text-amber-600 text-center max-w-xs">
@@ -1707,6 +1879,55 @@
                       />
                       <p className="text-[10px] text-slate-400 mt-1">※ 잊지 마세요. 재설정 기능은 없습니다.</p>
                     </div>
+                    {authMode === 'register' && (
+                      <div className="border-t border-slate-200 pt-3 space-y-2">
+                        <label className="block text-xs font-bold text-slate-600">학교 (NEIS 검색)</label>
+                        <div className="flex gap-2">
+                          <select value={regSchoolKind} onChange={e => setRegSchoolKind(e.target.value)}
+                                  className="border border-slate-300 rounded-lg px-2 py-2 text-sm">
+                            {NEIS_SCHOOL_KINDS.map(k => <option key={k} value={k}>{k}</option>)}
+                          </select>
+                          <select value={regRegion} onChange={e => setRegRegion(e.target.value)}
+                                  className="flex-1 border border-slate-300 rounded-lg px-2 py-2 text-sm">
+                            <option value="">시/도 선택</option>
+                            {NEIS_REGIONS.map(r => <option key={r.code} value={r.code}>{r.name}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex gap-2">
+                          <input type="text" value={regSchoolQuery}
+                            onChange={e => setRegSchoolQuery(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchSchools(); } }}
+                            placeholder="학교명 일부 입력 후 검색"
+                            className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
+                          <button type="button" onClick={searchSchools} disabled={regSchoolBusy}
+                                  className="px-3 py-2 bg-slate-600 hover:bg-slate-700 disabled:bg-slate-300 text-white text-sm rounded-lg font-bold">
+                            {regSchoolBusy ? '...' : '검색'}
+                          </button>
+                        </div>
+                        {regSchoolError && <div className="text-xs text-red-600">{regSchoolError}</div>}
+                        {regSchoolList.length > 0 && !regSchoolSelected && (
+                          <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 bg-white">
+                            {regSchoolList.map(s => (
+                              <button type="button" key={s.code}
+                                onClick={() => { setRegSchoolSelected(s); setRegSchoolList([]); }}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-purple-50">
+                                <div className="font-semibold text-slate-800">{s.name}</div>
+                                <div className="text-[10px] text-slate-400">{s.address}</div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {regSchoolSelected && (
+                          <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                            <div className="text-sm">
+                              <span className="font-bold text-emerald-800">✓ {regSchoolSelected.name}</span>
+                            </div>
+                            <button type="button" onClick={() => setRegSchoolSelected(null)}
+                                    className="text-xs text-emerald-700 hover:underline">변경</button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {authError && <div className="text-xs text-red-600 bg-red-50 p-2 rounded">{authError}</div>}
                     <button
                       onClick={authMode === 'login' ? handleLogin : handleRegister}
@@ -1785,48 +2006,31 @@
                         </div>
                       )}
                       {topList.length > 0 && (
-                        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                          <div className="p-3 bg-amber-50 border-b border-amber-100 font-bold text-amber-800 flex items-center gap-2">
-                            🏆 명예의 전당 · TOP 10
+                        <div>
+                          <div className="text-center mb-3">
+                            <div className="font-black text-xl text-slate-800">🏆 랭킹 보드</div>
+                            <div className="text-xs text-slate-500">상위 {topList.length}명의 기록</div>
                           </div>
-                          <ul className="divide-y divide-slate-100 text-sm">
+                          <div className="space-y-2">
                             {topList.map(row => (
-                              <li key={row.rank} className={`flex items-center justify-between px-3 py-2 ${row.nickname === rankingUser?.nickname ? 'bg-purple-50' : ''}`}>
-                                <span className="flex items-center gap-2">
-                                  <span className={`font-mono w-6 text-right ${row.rank <= 3 ? 'text-amber-600 font-bold' : 'text-slate-500'}`}>{row.rank}</span>
-                                  <span className="font-semibold text-slate-800">{row.nickname}</span>
-                                  {row.nickname === rankingUser?.nickname && <span className="text-[10px] bg-purple-500 text-white px-1.5 py-0.5 rounded">나</span>}
-                                </span>
-                                <span className="font-mono text-xs text-slate-600">
-                                  {row.mistakes}실수 · {formatTime(row.time_seconds)}
-                                </span>
-                              </li>
+                              <LeaderboardRow key={row.rank} row={row} isMe={row.nickname === rankingUser?.nickname} formatTime={formatTime} />
                             ))}
-                          </ul>
+                          </div>
                         </div>
                       )}
                       {neighbors.length > 0 && (
-                        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                          <div className="p-3 bg-purple-50 border-b border-purple-100 font-bold text-purple-800 flex items-center justify-between">
-                            <span>📍 내 위치</span>
-                            <span className="text-xs font-normal text-purple-600">
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="font-bold text-purple-800">📍 내 위치</div>
+                            <div className="text-xs text-purple-600">
                               {neighbors[0]?.my_rank}위 / {neighbors[0]?.total}명
-                            </span>
+                            </div>
                           </div>
-                          <ul className="divide-y divide-slate-100 text-sm">
+                          <div className="space-y-2">
                             {neighbors.map(row => (
-                              <li key={row.rank} className={`flex items-center justify-between px-3 py-2 ${row.is_me ? 'bg-purple-100' : ''}`}>
-                                <span className="flex items-center gap-2">
-                                  <span className="font-mono w-6 text-right text-slate-500">{row.rank}</span>
-                                  <span className={`font-semibold ${row.is_me ? 'text-purple-700' : 'text-slate-800'}`}>{row.nickname}</span>
-                                  {row.is_me && <span className="text-[10px] bg-purple-500 text-white px-1.5 py-0.5 rounded">나</span>}
-                                </span>
-                                <span className="font-mono text-xs text-slate-600">
-                                  {row.mistakes}실수 · {formatTime(row.time_seconds)}
-                                </span>
-                              </li>
+                              <LeaderboardRow key={row.rank} row={row} isMe={row.is_me} formatTime={formatTime} />
                             ))}
-                          </ul>
+                          </div>
                         </div>
                       )}
                     </div>
