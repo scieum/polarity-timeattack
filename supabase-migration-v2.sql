@@ -66,7 +66,7 @@ begin
   if v_user_id is null then raise exception 'AUTH_FAILED'; end if;
 
   if p_mistakes     < 0 or p_mistakes     > 500   then raise exception 'BAD_MISTAKES'; end if;
-  if p_time_seconds < 0 or p_time_seconds > 36000 then raise exception 'BAD_TIME';     end if;
+  if p_time_seconds < 0 or p_time_seconds > 3600000 then raise exception 'BAD_TIME';     end if;
 
   select mistakes, time_seconds into v_prev_m, v_prev_t
     from quiz_rankings where user_id = v_user_id;
