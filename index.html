@@ -272,8 +272,8 @@
             </div>
             <div className="shrink-0 text-right">
               <div className="text-lg font-extrabold leading-none">
-                <span className="text-red-500">{row.mistakes}</span>
-                <span className="text-xs font-bold text-red-500 ml-1">miss</span>
+                <span className={row.mistakes > 0 ? 'text-red-500' : 'text-slate-400'}>{row.mistakes}</span>
+                <span className={`text-xs font-bold ml-1 ${row.mistakes > 0 ? 'text-red-500' : 'text-slate-400'}`}>miss</span>
               </div>
               <div className="text-xs font-mono text-slate-500 mt-0.5">{formatTime(row.time_seconds)}</div>
               <div className="text-[10px] text-slate-400 mt-0.5">{relativeTime(row.updated_at)}</div>
@@ -1870,7 +1870,7 @@
                       <h3 className="font-bold text-lg text-slate-900 tracking-tight">{attemptDetail.nickname}</h3>
                       <p className="text-xs text-slate-500 mt-0.5">{attemptDetail.school_name || '학교 미등록'}</p>
                       <div className="mt-2 flex items-center justify-center gap-3 text-sm">
-                        <span className="text-red-500 font-extrabold">{attemptDetail.mistakes}<span className="text-xs ml-0.5">miss</span></span>
+                        <span className={`font-extrabold ${attemptDetail.mistakes > 0 ? 'text-red-500' : 'text-slate-400'}`}>{attemptDetail.mistakes}<span className="text-xs ml-0.5">miss</span></span>
                         <span className="text-slate-300">·</span>
                         <span className="font-mono text-slate-600">{formatTime(attemptDetail.time_seconds)}</span>
                       </div>
@@ -2101,7 +2101,7 @@
                       </div>
                       <div className="flex items-center justify-between pt-3">
                         <span className="text-sm font-medium text-slate-500">miss</span>
-                        <span className="font-mono text-lg font-extrabold text-red-500">{mistakeCount}</span>
+                        <span className={`font-mono text-lg font-extrabold ${mistakeCount > 0 ? 'text-red-500' : 'text-slate-400'}`}>{mistakeCount}</span>
                       </div>
                     </div>
                   )}
@@ -2115,8 +2115,8 @@
                               <p className="font-semibold text-slate-900">새 기록 달성</p>
                               {submitResult.prev_mistakes !== null ? (
                                 <p className="text-xs text-slate-500 mt-1">
-                                  이전 <span className="text-red-500 font-semibold">{submitResult.prev_mistakes} miss</span>·{formatTime(submitResult.prev_time)} →
-                                  <span className="ml-1 font-semibold"><span className="text-red-500">{submitResult.best_mistakes} miss</span>·{formatTime(submitResult.best_time)}</span>
+                                  이전 <span className={`font-semibold ${submitResult.prev_mistakes > 0 ? 'text-red-500' : 'text-slate-400'}`}>{submitResult.prev_mistakes} miss</span>·{formatTime(submitResult.prev_time)} →
+                                  <span className="ml-1 font-semibold"><span className={`${submitResult.best_mistakes > 0 ? 'text-red-500' : 'text-slate-400'}`}>{submitResult.best_mistakes} miss</span>·{formatTime(submitResult.best_time)}</span>
                                 </p>
                               ) : (
                                 <p className="text-xs text-slate-500 mt-1">첫 기록이 등록되었습니다</p>
@@ -2126,7 +2126,7 @@
                             <div>
                               <p className="font-semibold text-slate-900">기존 최고 기록이 더 좋아요</p>
                               <p className="text-xs text-slate-500 mt-1">
-                                최고 <span className="font-semibold"><span className="text-red-500">{submitResult.best_mistakes} miss</span>·{formatTime(submitResult.best_time)}</span>
+                                최고 <span className="font-semibold"><span className={`${submitResult.best_mistakes > 0 ? 'text-red-500' : 'text-slate-400'}`}>{submitResult.best_mistakes} miss</span>·{formatTime(submitResult.best_time)}</span>
                               </p>
                             </div>
                           )}
