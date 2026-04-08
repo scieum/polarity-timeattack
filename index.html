@@ -1816,14 +1816,15 @@
           // 1단계: 모드 선택
           if (!gameMode) {
             return (
-              <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6">
+              <div className="min-h-screen bg-white flex flex-col items-center p-6">
                 <LeaderboardModal />
-                <div className="flex-1 flex flex-col items-center justify-center w-full max-w-sm space-y-4">
-                  <div className="text-center mb-8">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight tracking-tight">쌍극자 모멘트 방향</h1>
-                    <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight tracking-tight">타임어택</h2>
-                    <p className="text-slate-500 text-sm mt-3 font-medium">모드를 선택하세요</p>
+                <div className="flex-1 flex flex-col items-center justify-center w-full max-w-sm">
+                  <div className="w-full flex justify-center mt-4 mb-2">
+                    <img src="./logo.png" alt="The Dipole Momentum" className="w-64 sm:w-80 h-auto select-none pointer-events-none" />
                   </div>
+                  <p className="text-slate-500 text-sm font-medium tracking-tight text-center">쌍극자 모멘트 방향 타임어택</p>
+                  <p className="text-slate-400 text-xs mt-10 mb-4 font-medium">모드를 선택하세요</p>
+                  <div className="w-full space-y-4">
                   <button onClick={() => setGameMode('practice')} className="w-full border border-slate-200 hover:border-slate-300 bg-white text-slate-900 rounded-2xl btn-press text-left px-6 py-7 flex flex-col gap-1">
                     <span className="text-lg font-semibold">연습하기</span>
                     <span className="text-xs text-slate-400 font-normal">6문제 · 기록 저장 안 됨</span>
@@ -1832,7 +1833,8 @@
                     <span className="text-lg font-semibold">랭킹 도전</span>
                     <span className="text-xs text-slate-300 font-normal">8문제 · 전국 랭킹 등록</span>
                   </button>
-                  <button onClick={openLeaderboardModal} className="w-full text-slate-500 hover:text-slate-900 text-sm font-medium py-3 btn-press">
+                  </div>
+                  <button onClick={openLeaderboardModal} className="w-full text-slate-500 hover:text-slate-900 text-sm font-medium py-3 btn-press mt-2">
                     랭킹 보드 보기 →
                   </button>
                   {!supabaseClient && (
