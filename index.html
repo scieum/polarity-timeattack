@@ -1857,7 +1857,16 @@
                 <div className="flex-1 flex flex-col items-center justify-center w-full max-w-sm space-y-5">
                   <div className="text-center mb-2">
                     <h1 className="text-2xl font-black text-slate-900 mb-1">🏆 랭킹 도전</h1>
-                    <p className="text-slate-500 text-sm">{authMode === 'login' ? '닉네임과 식별번호로 접속' : '새 닉네임 등록'}</p>
+                  </div>
+                  <div className="w-full flex gap-2 mb-1">
+                    <button onClick={() => { setAuthMode('login'); setAuthError(''); }}
+                      className={`flex-1 py-2 rounded-lg font-bold text-sm ${authMode === 'login' ? 'bg-purple-500 text-white shadow' : 'bg-white text-slate-500 border border-slate-200'}`}>
+                      접속하기
+                    </button>
+                    <button onClick={() => { setAuthMode('register'); setAuthError(''); }}
+                      className={`flex-1 py-2 rounded-lg font-bold text-sm ${authMode === 'register' ? 'bg-purple-500 text-white shadow' : 'bg-white text-slate-500 border border-slate-200'}`}>
+                      새 등록
+                    </button>
                   </div>
                   <div className="w-full bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
                     <div>
@@ -1935,12 +1944,6 @@
                       className="w-full bg-purple-500 hover:bg-purple-600 disabled:bg-slate-300 text-white font-bold py-3 rounded-xl shadow btn-press"
                     >
                       {authBusy ? '처리 중...' : (authMode === 'login' ? '접속하기' : '등록하고 시작')}
-                    </button>
-                    <button
-                      onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }}
-                      className="w-full text-xs text-purple-600 hover:underline"
-                    >
-                      {authMode === 'login' ? '처음이신가요? 새 닉네임 등록' : '이미 등록했어요 · 접속하기'}
                     </button>
                   </div>
                   <button onClick={() => setGameMode(null)} className="w-full max-w-xs bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-xl shadow-md btn-press">
