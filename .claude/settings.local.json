@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -rn time_seconds 'C:/Users/Owner/OneDrive - 한국교원대학교/Claude Code/polarity-timeattack/.claude/worktrees/compassionate-jang' --include=*.sql --include=*.md)"
+      "Bash(grep -rn time_seconds 'C:/Users/Owner/OneDrive - 한국교원대학교/Claude Code/polarity-timeattack/.claude/worktrees/compassionate-jang' --include=*.sql --include=*.md)",
+      "Bash(ls *.sql)"
     ]
   }
 }
