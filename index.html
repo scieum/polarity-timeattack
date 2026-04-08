@@ -1642,7 +1642,7 @@
         };
 
         const submitRankingScore = async () => {
-          if (!rankingUser) return;
+          if (!rankingUser) return null;
           setLeaderboardBusy(true);
           try {
             const result = await rpc('submit_score', {
@@ -1651,7 +1651,6 @@
               p_mistakes: mistakeCount,
               p_time_seconds: timer
             });
-            // v2 returns jsonb object directly
             setSubmitResult(result || null);
             const [top, nb] = await Promise.all([
               rpc('get_top_ranking', { p_limit: 20 }),
@@ -1659,10 +1658,12 @@
             ]);
             setTopList(top || []);
             setNeighbors(nb || []);
+            return { result, top: top || [], nb: nb || [] };
           } catch (e) {
             console.error('[submit_score]', e);
             const msg = e.message || e.hint || e.details || JSON.stringify(e);
             alert('점수 제출 실패: ' + msg);
+            return null;
           } finally { setLeaderboardBusy(false); }
         };
 
@@ -1678,12 +1679,14 @@
           } finally { setModalBusy(false); }
         };
 
-        // 랭킹 모드에서 퀴즈가 끝나면 자동 제출
-        useEffect(() => {
-          if (completed && level === 'ranking' && rankingUser && !submitResult && !leaderboardBusy) {
-            submitRankingScore();
+        // 랭킹 모드 수동 제출: 버튼 클릭 → 점수 제출 후 리더보드 모달 오픈
+        const submitAndShowBoard = async () => {
+          const out = await submitRankingScore();
+          if (out) {
+            setModalTopList(out.top);
+            setShowLeaderboardModal(true);
           }
-        }, [completed, level]);
+        };
 
         const currentQuiz = quizList[step] || {};
 
@@ -1959,6 +1962,7 @@
         if (completed) {
           return (
             <div className="flex flex-col min-h-screen bg-slate-50">
+                <LeaderboardModal />
                 <div className="flex-1 p-6 flex flex-col items-center">
                   <div className="text-7xl mb-6 animate-float">🎉</div>
                   <h1 className="text-3xl font-bold text-slate-800 mb-4 text-center">
@@ -1980,12 +1984,9 @@
                   )}
 
                   {level === 'ranking' && (
-                    <div className="w-full max-w-md mb-6 space-y-4">
-                      {leaderboardBusy && !submitResult && (
-                        <div className="text-center text-slate-500 text-sm">랭킹 불러오는 중...</div>
-                      )}
-                      {submitResult && (
-                        <div className={`p-4 rounded-xl border ${submitResult.updated ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`}>
+                    <div className="w-full max-w-xs mb-6 space-y-3">
+                      {submitResult ? (
+                        <div className={`p-4 rounded-xl border text-center ${submitResult.updated ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`}>
                           {submitResult.updated ? (
                             <div>
                               <p className="font-bold text-emerald-700 text-lg">🎉 새 기록 달성!</p>
@@ -1995,46 +1996,27 @@
                                   <strong className="ml-1">{submitResult.best_mistakes}실수 · {formatTime(submitResult.best_time)}</strong>
                                 </p>
                               ) : (
-                                <p className="text-xs text-slate-600 mt-1">첫 기록이 등록되었습니다. 앞으로 갱신해 보세요!</p>
+                                <p className="text-xs text-slate-600 mt-1">첫 기록이 등록되었습니다!</p>
                               )}
                             </div>
                           ) : (
                             <div>
                               <p className="font-bold text-slate-700">기존 최고 기록이 더 좋아요 💪</p>
                               <p className="text-xs text-slate-500 mt-1">
-                                최고: <strong>{submitResult.best_mistakes}실수 · {formatTime(submitResult.best_time)}</strong> · 다시 도전해서 깨보세요!
+                                최고: <strong>{submitResult.best_mistakes}실수 · {formatTime(submitResult.best_time)}</strong>
                               </p>
                             </div>
                           )}
+                          <button onClick={() => { setModalTopList(topList); setShowLeaderboardModal(true); }}
+                                  className="mt-3 w-full bg-amber-400 hover:bg-amber-500 text-amber-900 font-bold py-2 rounded-lg btn-press text-sm">
+                            🏅 랭킹 보드 다시 보기
+                          </button>
                         </div>
-                      )}
-                      {topList.length > 0 && (
-                        <div>
-                          <div className="text-center mb-3">
-                            <div className="font-black text-xl text-slate-800">🏆 랭킹 보드</div>
-                            <div className="text-xs text-slate-500">상위 {topList.length}명의 기록</div>
-                          </div>
-                          <div className="space-y-2">
-                            {topList.map(row => (
-                              <LeaderboardRow key={row.rank} row={row} isMe={row.nickname === rankingUser?.nickname} formatTime={formatTime} />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {neighbors.length > 0 && (
-                        <div>
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="font-bold text-purple-800">📍 내 위치</div>
-                            <div className="text-xs text-purple-600">
-                              {neighbors[0]?.my_rank}위 / {neighbors[0]?.total}명
-                            </div>
-                          </div>
-                          <div className="space-y-2">
-                            {neighbors.map(row => (
-                              <LeaderboardRow key={row.rank} row={row} isMe={row.is_me} formatTime={formatTime} />
-                            ))}
-                          </div>
-                        </div>
+                      ) : (
+                        <button onClick={submitAndShowBoard} disabled={leaderboardBusy}
+                                className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 disabled:opacity-60 text-white font-black py-4 rounded-2xl shadow-lg btn-press text-lg flex items-center justify-center gap-2">
+                          {leaderboardBusy ? '등록 중...' : '🏆 랭킹 등록하기'}
+                        </button>
                       )}
                     </div>
                   )}
