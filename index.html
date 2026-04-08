@@ -790,14 +790,22 @@
         }
       ];
 
-      // 랭킹 모드용 통합 풀 (상급 5개 풀 + SPECIAL 풀)
-      const RANKING_POOL = [
-        ...ADVANCED_POOL_1, ...ADVANCED_POOL_2, ...ADVANCED_POOL_3,
-        ...ADVANCED_POOL_4, ...ADVANCED_POOL_5, ...SPECIAL_POOL
-      ];
+      // 랭킹 모드용 통합 풀 (상급 5개 풀 + SPECIAL 풀, id 기준 중복 제거)
+      const RANKING_POOL = (() => {
+        const all = [
+          ...ADVANCED_POOL_1, ...ADVANCED_POOL_2, ...ADVANCED_POOL_3,
+          ...ADVANCED_POOL_4, ...ADVANCED_POOL_5, ...SPECIAL_POOL
+        ];
+        const seen = new Set();
+        return all.filter(q => {
+          if (seen.has(q.id)) return false;
+          seen.add(q.id);
+          return true;
+        });
+      })();
       const RANKING_QUESTION_COUNT = 8;
 
-      // 랭킹 모드 문제 8개 랜덤 선택 (중복 없음)
+      // 랭킹 모드 문제 8개 랜덤 선택 (한 판 내 중복 없음)
       function pickRankingQuestions() {
         const shuffled = [...RANKING_POOL].sort(() => Math.random() - 0.5);
         return shuffled.slice(0, RANKING_QUESTION_COUNT);
