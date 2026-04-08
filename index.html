@@ -1,0 +1,2145 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>쌍극자 모멘트 방향 · 상급 타임어택</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css" />
+    <!-- Team CSS -->
+    <link rel="stylesheet" href="quiz.css">
+    
+    <style>
+      body { 
+        font-family: 'Pretendard', 'Noto Sans KR', sans-serif; 
+        -webkit-tap-highlight-color: transparent;
+        touch-action: pan-y;
+        background-color: #f8fafc;
+        color: #334155;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+      
+      /* PC 화면에서 화이트보드 크기 제한 (polarityway용) */
+      @media (min-width: 768px) {
+        .molecule-viewer-container {
+          max-width: 600px;
+          margin: 0 auto;
+        }
+        .molecule-viewer-container svg {
+          max-height: 400px;
+        }
+      }
+      
+      /* 모바일 화면에서 화이트보드 크기 조정 (basicpolarity용) */
+      @media (max-width: 768px) {
+        .molecule-viewer-container-basic {
+          height: 250px !important;
+        }
+      }
+      
+      /* Animations */
+      @keyframes pop { 
+        0% { transform: scale(0.9); opacity: 0; } 
+        100% { transform: scale(1); opacity: 1; } 
+      }
+      .animate-pop { 
+        animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; 
+        transform-origin: center; 
+        transform-box: fill-box; 
+      }
+      
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-4px); }
+        75% { transform: translateX(4px); }
+      }
+      .animate-shake {
+        animation: shake 0.2s ease-in-out 2;
+      }
+      
+      @keyframes pulse-red {
+        0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+      }
+      .animate-pulse-red { animation: pulse-red 1.5s infinite; }
+
+      @keyframes target-pulse {
+        0% { r: 4; opacity: 0.6; }
+        50% { r: 8; opacity: 0.3; }
+        100% { r: 4; opacity: 0.6; }
+      }
+      .target-point { animation: target-pulse 1.5s infinite; }
+
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .fade-in { animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+
+      @keyframes slideUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .slide-up { animation: slideUp 0.5s ease-out forwards; opacity: 0; transform: translateY(20px); }
+
+      @keyframes zoomIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      .zoom-in { animation: zoomIn 0.3s ease-out forwards; opacity: 0; transform: scale(0.95); }
+
+      .touch-action-manipulation { touch-action: manipulation; }
+      .scrollbar-hide::-webkit-scrollbar { display: none; }
+      .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+      
+      .diagonal-header {
+        background: linear-gradient(to top right, transparent 49.5%, #cbd5e1 49.5%, #cbd5e1 50.5%, transparent 50.5%);
+      }
+
+      .menu-card { 
+        transition: all 0.3s ease; 
+      }
+      .menu-card:hover { 
+        transform: translateY(-5px); 
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); 
+      }
+      .menu-card:active { 
+        transform: scale(0.98); 
+      }
+
+      .hidden-screen { display: none !important; }
+    </style>
+    
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 900: '#0c4a6e' },
+            }
+          }
+        }
+      }
+    </script>
+  </head>
+  <body class="bg-slate-50 text-slate-900 min-h-screen">
+    <div id="root" class="min-h-screen"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect, useMemo, useRef } = React;
+
+      // ======================================================================
+      // 공통 데이터 및 상수 (한 번만 정의)
+      // ======================================================================
+      
+      const COLORS = {
+        H: '#FCA5A5', Group1: '#99F6E4', Group2: '#FDE047', Group13: '#FCA5A5',
+        Group14: '#93C5FD', Group15: '#FDA4AF', Group16: '#C4B5FD', Group17: '#D8B4FE',
+      };
+
+      // 통합된 ELEMENTS 데이터 (두 퀴즈 모두 사용)
+      const ELEMENTS = {
+        H: { symbol: 'H', name: '수소', en: 2.2, atomicNumber: 1, color: COLORS.H, textColor: '#1e293b' },
+        Li: { symbol: 'Li', name: '리튬', en: 1.0, atomicNumber: 3, color: COLORS.Group1, textColor: '#450a0a' },
+        Be: { symbol: 'Be', name: '베릴륨', en: 1.6, atomicNumber: 4, color: COLORS.Group2, textColor: '#451a03' },
+        B: { symbol: 'B', name: '붕소', en: 2.0, atomicNumber: 5, color: COLORS.Group13, textColor: '#422006' },
+        C: { symbol: 'C', name: '탄소', en: 2.6, atomicNumber: 6, color: COLORS.Group14, textColor: '#f8fafc' },
+        N: { symbol: 'N', name: '질소', en: 3.0, atomicNumber: 7, color: COLORS.Group15, textColor: '#eff6ff' },
+        O: { symbol: 'O', name: '산소', en: 3.4, atomicNumber: 8, color: COLORS.Group16, textColor: '#fef2f2' },
+        F: { symbol: 'F', name: '플루오린', en: 4.0, atomicNumber: 9, color: COLORS.Group17, textColor: '#f0fdf4' },
+        Na: { symbol: 'Na', name: '나트륨', en: 0.9, atomicNumber: 11, color: COLORS.Group1, textColor: '#450a0a' },
+        Mg: { symbol: 'Mg', name: '마그네슘', en: 1.3, atomicNumber: 12, color: COLORS.Group2, textColor: '#451a03' },
+        Al: { symbol: 'Al', name: '알루미늄', en: 1.6, atomicNumber: 13, color: COLORS.Group13, textColor: '#422006' },
+        Si: { symbol: 'Si', name: '규소', en: 1.9, atomicNumber: 14, color: '#cbd5e1', textColor: '#1e293b' },
+        P: { symbol: 'P', name: '인', en: 2.2, atomicNumber: 15, color: '#f87171', textColor: '#450a0a' },
+        S: { symbol: 'S', name: '황', en: 2.6, atomicNumber: 16, color: '#fbbf24', textColor: '#451a03' },
+        Cl: { symbol: 'Cl', name: '염소', en: 3.2, atomicNumber: 17, color: '#22c55e', textColor: '#f0fdf4' },
+        K: { symbol: 'K', name: '칼륨', en: 0.8, atomicNumber: 19, color: COLORS.Group1, textColor: '#450a0a' },
+        Ca: { symbol: 'Ca', name: '칼슘', en: 1.0, atomicNumber: 20, color: COLORS.Group2, textColor: '#451a03' },
+        Br: { symbol: 'Br', name: '브로민', en: 3.0, atomicNumber: 35, color: '#4ade80', textColor: '#064e3b' },
+        I: { symbol: 'I', name: '아이오딘', en: 2.7, atomicNumber: 53, color: COLORS.Group17, textColor: '#064e3b' },
+      };
+
+      const BondType = { 
+        SINGLE: 1, 
+        DOUBLE: 2, 
+        TRIPLE: 3,
+        // basicpolarity용 문자열 타입도 지원
+        'single': 'single',
+        'double': 'double',
+        'triple': 'triple'
+      };
+      
+      const BondPolarity = { NON_POLAR: 'non-polar', POLAR: 'polar' };
+
+      // ======================================================================
+      // 공통 아이콘 컴포넌트 (한 번만 정의)
+      // ======================================================================
+      const Icons = {
+        Atom: ({size=24, className=""}) => <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><path d="M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5Z"/><path d="M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5Z"/></svg>,
+        Info: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>,
+        CheckCircle: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>,
+        ArrowRight: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>,
+        BookOpen: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
+        TableProperties: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M21 9H3"/><path d="M21 15H3"/></svg>,
+        HelpCircle: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>,
+        RotateCcw: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>,
+        Play: ({size=24, fill="none"}) => <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>,
+        ListFilter: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg>,
+        X: ({size=24}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      };
+
+      // ======================================================================
+      // 공통 컴포넌트 (한 번만 정의)
+      // ======================================================================
+
+      // 전기음성도 표 컴포넌트 (두 퀴즈 모두 사용)
+      const TableCell = ({ symbol, data }) => {
+        if (!data) return <div className="aspect-[3/4] rounded invisible" />;
+        return (
+          <div 
+            className="aspect-[3/4] flex flex-col items-center justify-center border border-slate-300 shadow-sm rounded transition-transform hover:scale-105 cursor-help bg-white relative overflow-hidden"
+            style={{ backgroundColor: data.color }}
+            title={`${data.name} (원자번호: ${data.atomicNumber})`}
+          >
+            <span className="absolute top-1 left-1.5 text-[10px] sm:text-xs text-slate-700 font-medium">{data.atomicNumber}</span>
+            <span className="text-lg sm:text-2xl font-serif font-bold text-slate-900 mt-1">{symbol}</span>
+            <span className="text-xs sm:text-sm font-semibold text-slate-800 mt-0.5">{data.en.toFixed(1)}</span>
+          </div>
+        );
+      };
+
+      const ElectronegativityTable = ({ isOpen, onClose }) => {
+        if (!isOpen) return null;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 fade-in">
+            <div className="clean-panel w-full max-w-5xl max-h-[90vh] overflow-auto flex flex-col shadow-2xl">
+              <div className="flex justify-between items-center p-4 border-b border-slate-100 bg-slate-50 sticky top-0 z-10">
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">📊 전기음성도 표</h2>
+                <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors btn-press"><Icons.X size={24} /></button>
+              </div>
+              <div className="p-6 overflow-x-auto">
+                <div className="min-w-[600px] select-none">
+                  <div className="grid grid-cols-[repeat(2,1fr)_0.5fr_repeat(5,1fr)] gap-2 mb-2 text-center font-bold text-slate-500 text-sm">
+                      <div>1족</div><div>2족</div><div></div><div>13족</div><div>14족</div><div>15족</div><div>16족</div><div>17족</div>
+                  </div>
+                  <div className="grid grid-cols-[repeat(2,1fr)_0.5fr_repeat(5,1fr)] gap-2 mb-2">
+                      <TableCell symbol="H" data={ELEMENTS['H']} /><div /><div /><div /><div /><div /><div /><div />
+                  </div>
+                  <div className="grid grid-cols-[repeat(2,1fr)_0.5fr_repeat(5,1fr)] gap-2 mb-2">
+                      <TableCell symbol="Li" data={ELEMENTS['Li']} /><TableCell symbol="Be" data={ELEMENTS['Be']} /><div />
+                      <TableCell symbol="B" data={ELEMENTS['B']} /><TableCell symbol="C" data={ELEMENTS['C']} />
+                      <TableCell symbol="N" data={ELEMENTS['N']} /><TableCell symbol="O" data={ELEMENTS['O']} /><TableCell symbol="F" data={ELEMENTS['F']} />
+                  </div>
+                  <div className="grid grid-cols-[repeat(2,1fr)_0.5fr_repeat(5,1fr)] gap-2 mb-2">
+                      <TableCell symbol="Na" data={ELEMENTS['Na']} /><TableCell symbol="Mg" data={ELEMENTS['Mg']} /><div />
+                      <TableCell symbol="Al" data={ELEMENTS['Al']} /><TableCell symbol="Si" data={ELEMENTS['Si']} />
+                      <TableCell symbol="P" data={ELEMENTS['P']} /><TableCell symbol="S" data={ELEMENTS['S']} /><TableCell symbol="Cl" data={ELEMENTS['Cl']} />
+                  </div>
+                  <div className="grid grid-cols-[repeat(2,1fr)_0.5fr_repeat(5,1fr)] gap-2 mb-2">
+                      <TableCell symbol="K" data={ELEMENTS['K']} /><TableCell symbol="Ca" data={ELEMENTS['Ca']} /><div /><div /><div /><div /><div /><TableCell symbol="Br" data={ELEMENTS['Br']} />
+                  </div>
+                  <div className="grid grid-cols-[repeat(2,1fr)_0.5fr_repeat(5,1fr)] gap-2 mb-2">
+                      <div /><div /><div /><div /><div /><div /><div /><TableCell symbol="I" data={ELEMENTS['I']} />
+                  </div>
+                </div>
+                <div className="mt-8 text-sm text-slate-500 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                  <h4 className="font-bold mb-2 text-blue-700 text-base">📝 참고 가이드 (고등학교 교육과정)</h4>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>원소 기호 아래의 숫자는 <strong>전기음성도</strong>입니다.</li>
+                    <li><strong>무극성 공유 결합:</strong> <strong>종류가 같은</strong> 원자 사이의 결합 (전기음성도 차이 = 0)</li>
+                    <li><strong>극성 공유 결합:</strong> <strong>종류가 다른</strong> 원자 사이의 결합 (전기음성도 차이 &gt; 0)</li>
+                    <li>종류가 다른 원자끼리 결합하면 전기음성도가 0.1이라도 차이가 나므로 극성 공유 결합으로 분류합니다.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      // 공통 Footer 컴포넌트
+      const Footer = () => (
+        <footer className="w-full flex items-center justify-center gap-2 text-slate-400 text-xs font-medium mt-8 mb-4">
+          <span>© 2025 사이음(sci_eum). 과학의 사이, 사람을 잇다.</span>
+          <a href="https://knuechem13.notion.site/ebd/2ba137a305b880fbac23d7b204098e51" target="_blank" className="hover:opacity-80 transition-opacity" title="오류 문의">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/e/e9/Notion-logo.svg" alt="Notion" className="w-4 h-4 opacity-60 hover:opacity-100 transition-opacity grayscale hover:grayscale-0" />
+          </a>
+        </footer>
+      );
+
+      // ======================================================================
+      // polarityway 퀴즈 데이터 및 컴포넌트
+      // ======================================================================
+      
+      const QUIZ_DATA_FIXED = {
+        beginner: [
+          {
+            id: 'h2', name: '수소 기체', formula: 'H₂', description: '같은 원자끼리 결합한 이원자 분자입니다.',
+            viewBox: "50 50 300 200", atoms: [{id:'a1',el:'H',x:150,y:150},{id:'a2',el:'H',x:250,y:150}],
+            bonds: [{id:'b1',from:'a1',to:'a2',type:BondType.SINGLE}]
+          },
+          {
+            id: 'hcl', name: '염화 수소', formula: 'HCl', description: '서로 다른 원자가 결합했습니다.',
+            viewBox: "50 50 300 200", atoms: [{id:'a1',el:'H',x:150,y:150},{id:'a2',el:'Cl',x:250,y:150}],
+            bonds: [{id:'b1',from:'a1',to:'a2',type:BondType.SINGLE}]
+          },
+          {
+            id: 'cl2', name: '염소 기체', formula: 'Cl₂', description: '같은 종류의 할로젠 원소 간 결합입니다.',
+            viewBox: "50 50 300 200", atoms: [{id:'a1',el:'Cl',x:150,y:150},{id:'a2',el:'Cl',x:250,y:150}],
+            bonds: [{id:'b1',from:'a1',to:'a2',type:BondType.SINGLE}]
+          },
+          {
+            id: 'hf', name: '플루오린화 수소', formula: 'HF', description: '전기음성도 차이가 매우 큰 결합입니다.',
+            viewBox: "50 50 300 200", atoms: [{id:'a1',el:'H',x:150,y:150},{id:'a2',el:'F',x:250,y:150}],
+            bonds: [{id:'b1',from:'a1',to:'a2',type:BondType.SINGLE}]
+          },
+          {
+            id: 'o2', name: '산소 기체', formula: 'O₂', description: '이중 결합을 하고 있는 이원자 분자입니다.',
+            viewBox: "50 50 300 200", atoms: [{id:'a1',el:'O',x:150,y:150},{id:'a2',el:'O',x:250,y:150}],
+            bonds: [{id:'b1',from:'a1',to:'a2',type:BondType.DOUBLE}]
+          },
+          {
+            id: 'hbr', name: '브로민화 수소', formula: 'HBr', description: '수소와 브로민의 결합입니다.',
+            viewBox: "50 50 300 200", atoms: [{id:'a1',el:'H',x:150,y:150},{id:'a2',el:'Br',x:250,y:150}],
+            bonds: [{id:'b1',from:'a1',to:'a2',type:BondType.SINGLE}]
+          }
+        ],
+        intermediate: [
+          {
+            id: 'co2', name: '이산화 탄소', formula: 'CO₂', description: '중심 탄소 양옆에 산소가 결합된 직선형 구조입니다.',
+            viewBox: "30 70 340 160", atoms: [{id:'c',el:'C',x:200,y:150},{id:'o1',el:'O',x:110,y:150},{id:'o2',el:'O',x:290,y:150}],
+            bonds: [{id:'b1',from:'c',to:'o1',type:BondType.DOUBLE},{id:'b2',from:'c',to:'o2',type:BondType.DOUBLE}]
+          },
+          {
+            id: 'h2o', name: '물', formula: 'H₂O', description: '산소에 수소 두 개가 결합된 굽은형 구조입니다.',
+            viewBox: "60 20 280 260", atoms: [{id:'o',el:'O',x:200,y:110},{id:'h1',el:'H',x:130,y:180},{id:'h2',el:'H',x:270,y:180}],
+            bonds: [{id:'b1',from:'o',to:'h1',type:BondType.SINGLE,placement:'up'},{id:'b2',from:'o',to:'h2',type:BondType.SINGLE,placement:'up'}]
+          },
+          {
+            id: 'becl2', name: '염화 베릴륨', formula: 'BeCl₂', description: '베릴륨을 중심으로 염소가 결합한 직선형 분자입니다.',
+            viewBox: "30 70 340 160", atoms: [{id:'be',el:'Be',x:200,y:150},{id:'cl1',el:'Cl',x:100,y:150},{id:'cl2',el:'Cl',x:300,y:150}],
+            bonds: [{id:'b1',from:'be',to:'cl1',type:BondType.SINGLE},{id:'b2',from:'be',to:'cl2',type:BondType.SINGLE}]
+          },
+          {
+            id: 'bf3', name: '삼플루오린화 붕소', formula: 'BF₃', description: '붕소를 중심으로 플루오린이 평면 삼각형을 이룹니다.',
+            viewBox: "40 20 320 300", 
+            atoms: [{id:'b',el:'B',x:200,y:170},{id:'f1',el:'F',x:200,y:60},{id:'f2',el:'F',x:100,y:230},{id:'f3',el:'F',x:300,y:230}],
+            bonds: [
+              {id:'b1',from:'b',to:'f1',type:BondType.SINGLE, placement:'down'},
+              {id:'b2',from:'b',to:'f2',type:BondType.SINGLE, placement:'up'}, 
+              {id:'b3',from:'b',to:'f3',type:BondType.SINGLE, placement:'up'}
+            ]
+          },
+          {
+            id: 'nh3', name: '암모니아', formula: 'NH₃', description: '질소를 중심으로 수소가 삼각뿔 형태를 이룹니다.',
+            viewBox: "40 40 320 300", 
+            atoms: [
+              {id:'n',el:'N',x:200,y:100},
+              {id:'h1',el:'H',x:100,y:180}, 
+              {id:'h2',el:'H',x:200,y:240}, 
+              {id:'h3',el:'H',x:300,y:180}  
+            ],
+            bonds: [
+              {id:'b1',from:'n',to:'h1',type:BondType.SINGLE, placement:'up'},   
+              {id:'b2',from:'n',to:'h2',type:BondType.SINGLE, placement:'down'}, 
+              {id:'b3',from:'n',to:'h3',type:BondType.SINGLE, placement:'up'}    
+            ]
+          },
+          {
+            id: 'ch4', name: '메테인', formula: 'CH₄', description: '탄소를 중심으로 수소가 정사면체 구조입니다.',
+            viewBox: "20 20 360 360", 
+            atoms: [
+              {id:'c',el:'C',x:180,y:180},
+              {id:'h1',el:'H',x:180,y:60},  
+              {id:'h2',el:'H',x:300,y:180}, 
+              {id:'h3',el:'H',x:180,y:300}, 
+              {id:'h4',el:'H',x:60,y:180}   
+            ],
+            bonds: [
+              {id:'b1',from:'c',to:'h1',type:BondType.SINGLE, placement:'down'}, 
+              {id:'b2',from:'c',to:'h2',type:BondType.SINGLE, placement:'up'},   
+              {id:'b3',from:'c',to:'h3',type:BondType.SINGLE, placement:'down'}, 
+              {id:'b4',from:'c',to:'h4',type:BondType.SINGLE, placement:'up'}    
+            ]
+          },
+        ]
+      };
+
+      const ADVANCED_POOL_1 = [
+        {
+          id: 'hcn', name: '사이안화 수소', formula: 'HCN', description: '탄소를 중심으로 수소와 질소가 결합된 직선형 분자입니다.',
+          viewBox: "30 70 340 160", 
+          atoms: [{id:'c',el:'C',x:200,y:150},{id:'h',el:'H',x:100,y:150},{id:'n',el:'N',x:300,y:150}],
+          bonds: [{id:'b1',from:'c',to:'h',type:BondType.SINGLE},{id:'b2',from:'c',to:'n',type:BondType.TRIPLE}]
+        },
+        {
+          id: 'ch2o', name: '폼알데하이드', formula: 'CH₂O', description: '탄소를 중심으로 산소와 두 수소가 결합된 평면 삼각형 구조입니다.',
+          viewBox: "40 40 320 300",
+          atoms: [{id:'c',el:'C',x:200,y:160},{id:'o',el:'O',x:200,y:80},{id:'h1',el:'H',x:110,y:210},{id:'h2',el:'H',x:290,y:210}],
+          bonds: [
+            {id:'b1',from:'c',to:'o',type:BondType.DOUBLE, placement:'down'},
+            {id:'b2',from:'c',to:'h1',type:BondType.SINGLE, placement:'up'},
+            {id:'b3',from:'c',to:'h2',type:BondType.SINGLE, placement:'up'}
+          ]
+        },
+        {
+          id: 'ch3cl', name: '클로로메테인', formula: 'CH₃Cl', description: '메테인에서 수소 하나가 염소로 치환된 구조입니다.',
+          viewBox: "30 30 340 340",
+          atoms: [{id:'c',el:'C',x:200,y:200},{id:'cl',el:'Cl',x:200,y:80},{id:'h1',el:'H',x:320,y:200},{id:'h2',el:'H',x:200,y:320},{id:'h3',el:'H',x:80,y:200}],
+          bonds: [
+            {id:'b1',from:'c',to:'cl',type:BondType.SINGLE, placement:'right'},
+            {id:'b2',from:'c',to:'h1',type:BondType.SINGLE, placement:'up'},
+            {id:'b3',from:'c',to:'h2',type:BondType.SINGLE, placement:'right'},
+            {id:'b4',from:'c',to:'h3',type:BondType.SINGLE, placement:'up'}
+          ]
+        },
+        {
+          id: 'co2', name: '이산화 탄소', formula: 'CO₂', description: '탄소를 중심으로 두 산소가 이중 결합된 직선형 분자입니다.',
+          viewBox: "30 100 340 100",
+          atoms: [{id:'c',el:'C',x:200,y:150},{id:'o1',el:'O',x:100,y:150},{id:'o2',el:'O',x:300,y:150}],
+          bonds: [{id:'b1',from:'c',to:'o1',type:BondType.DOUBLE},{id:'b2',from:'c',to:'o2',type:BondType.DOUBLE}]
+        },
+        {
+          id: 'so2', name: '이산화 황', formula: 'SO₂', description: '황을 중심으로 두 산소가 결합된 굽은형 분자입니다.',
+          viewBox: "30 40 340 220",
+          atoms: [{id:'s',el:'S',x:200,y:180},{id:'o1',el:'O',x:120,y:100},{id:'o2',el:'O',x:280,y:100}],
+          bonds: [{id:'b1',from:'s',to:'o1',type:BondType.DOUBLE},{id:'b2',from:'s',to:'o2',type:BondType.DOUBLE}]
+        },
+        {
+          id: 'hocl', name: '하이포염소산', formula: 'HOCl', description: '산소를 중심으로 수소와 염소가 결합된 굽은형 분자입니다.',
+          viewBox: "40 40 320 220",
+          atoms: [{id:'o',el:'O',x:200,y:200},{id:'h',el:'H',x:120,y:100},{id:'cl',el:'Cl',x:290,y:100}],
+          bonds: [{id:'b1',from:'o',to:'h',type:BondType.SINGLE},{id:'b2',from:'o',to:'cl',type:BondType.SINGLE}]
+        }
+      ];
+
+      const ADVANCED_POOL_2 = [
+        {
+          id: 'h2o2', name: '과산화 수소', formula: 'H₂O₂', description: 'O-O 결합과 O-H 결합이 공존합니다.',
+          viewBox: "30 30 340 300", 
+          atoms: [{id:'o1',el:'O',x:160,y:130},{id:'o2',el:'O',x:240,y:130},{id:'h1',el:'H',x:110,y:200},{id:'h2',el:'H',x:290,y:80}],
+          bonds: [{id:'b1',from:'o1',to:'h1',type:BondType.SINGLE},{id:'b2',from:'o1',to:'o2',type:BondType.SINGLE},{id:'b3',from:'o2',to:'h2',type:BondType.SINGLE}]
+        },
+        {
+          id: 'n2h4', name: '하이드라진', formula: 'N₂H₄', description: '질소 간의 결합이 있는 분자입니다.',
+          viewBox: "40 40 320 280",
+          atoms: [{id:'n1',el:'N',x:160,y:150},{id:'n2',el:'N',x:240,y:150},{id:'h1',el:'H',x:110,y:100},{id:'h2',el:'H',x:110,y:200},{id:'h3',el:'H',x:290,y:100},{id:'h4',el:'H',x:290,y:200}],
+          bonds: [{id:'b1',from:'n1',to:'n2',type:BondType.SINGLE},{id:'b2',from:'n1',to:'h1',type:BondType.SINGLE},{id:'b3',from:'n1',to:'h2',type:BondType.SINGLE},{id:'b4',from:'n2',to:'h3',type:BondType.SINGLE},{id:'b5',from:'n2',to:'h4',type:BondType.SINGLE}]
+        },
+        {
+          id: 'c2h6', name: '에테인', formula: 'C₂H₆', description: '탄소 간 단일 결합을 가진 분자입니다.',
+          viewBox: "0 0 400 350", 
+          atoms: [{id:'c1',el:'C',x:140,y:150},{id:'c2',el:'C',x:260,y:150},{id:'h1',el:'H',x:140,y:70},{id:'h2',el:'H',x:140,y:230},{id:'h3',el:'H',x:60,y:150},{id:'h4',el:'H',x:260,y:70},{id:'h5',el:'H',x:260,y:230},{id:'h6',el:'H',x:340,y:150}],
+          bonds: [{id:'b1',from:'c1',to:'c2',type:BondType.SINGLE},{id:'b2',from:'c1',to:'h1',type:BondType.SINGLE},{id:'b3',from:'c1',to:'h2',type:BondType.SINGLE},{id:'b4',from:'c1',to:'h3',type:BondType.SINGLE},{id:'b5',from:'c2',to:'h4',type:BondType.SINGLE},{id:'b6',from:'c2',to:'h5',type:BondType.SINGLE},{id:'b7',from:'c2',to:'h6',type:BondType.SINGLE}]
+        },
+        {
+          id: 'c2h4', name: '에틸렌', formula: 'C₂H₄', description: '탄소 간 이중 결합을 가진 분자입니다.',
+          viewBox: "20 40 360 240",
+          atoms: [{id:'c1',el:'C',x:150,y:160},{id:'c2',el:'C',x:250,y:160},{id:'h1',el:'H',x:80,y:100},{id:'h2',el:'H',x:80,y:220},{id:'h3',el:'H',x:320,y:100},{id:'h4',el:'H',x:320,y:220}],
+          bonds: [{id:'b1',from:'c1',to:'c2',type:BondType.DOUBLE},{id:'b2',from:'c1',to:'h1',type:BondType.SINGLE},{id:'b3',from:'c1',to:'h2',type:BondType.SINGLE},{id:'b4',from:'c2',to:'h3',type:BondType.SINGLE},{id:'b5',from:'c2',to:'h4',type:BondType.SINGLE}]
+        },
+        {
+          id: 'c2h2', name: '아세틸렌', formula: 'C₂H₂', description: '탄소 간 삼중 결합을 가진 직선형 분자입니다.',
+          viewBox: "20 100 360 100",
+          atoms: [{id:'c1',el:'C',x:160,y:150},{id:'c2',el:'C',x:240,y:150},{id:'h1',el:'H',x:80,y:150},{id:'h2',el:'H',x:320,y:150}],
+          bonds: [{id:'b1',from:'c1',to:'c2',type:BondType.TRIPLE},{id:'b2',from:'c1',to:'h1',type:BondType.SINGLE},{id:'b3',from:'c2',to:'h2',type:BondType.SINGLE}]
+        },
+        {
+          id: 'n2h2', name: '다이아젠', formula: 'N₂H₂', description: '질소 간 이중 결합을 가진 분자입니다.',
+          viewBox: "20 40 360 240",
+          atoms: [{id:'n1',el:'N',x:150,y:160},{id:'n2',el:'N',x:250,y:160},{id:'h1',el:'H',x:80,y:100},{id:'h2',el:'H',x:320,y:220}],
+          bonds: [{id:'b1',from:'n1',to:'n2',type:BondType.DOUBLE},{id:'b2',from:'n1',to:'h1',type:BondType.SINGLE},{id:'b3',from:'n2',to:'h2',type:BondType.SINGLE}]
+        }
+      ];
+
+      const ADVANCED_POOL_3 = [
+        {
+          id: 'c2h3cl', name: '염화 비닐', formula: 'C₂H₃Cl', description: '수소 하나가 염소로 치환된 에틸렌입니다.',
+          viewBox: "20 20 360 320", 
+          atoms: [{id:'c1',el:'C',x:150,y:150},{id:'c2',el:'C',x:250,y:150},{id:'h1',el:'H',x:90,y:90},{id:'h2',el:'H',x:90,y:210},{id:'h3',el:'H',x:310,y:90},{id:'cl',el:'Cl',x:310,y:210}],
+          bonds: [{id:'b1',from:'c1',to:'c2',type:BondType.DOUBLE},{id:'b2',from:'c1',to:'h1',type:BondType.SINGLE},{id:'b3',from:'c1',to:'h2',type:BondType.SINGLE},{id:'b4',from:'c2',to:'h3',type:BondType.SINGLE},{id:'b5',from:'c2',to:'cl',type:BondType.SINGLE}]
+        },
+        {
+          id: 'c2h3f', name: '플루오로에틸렌', formula: 'C₂H₃F', description: '수소 하나가 플루오린으로 치환된 에틸렌입니다.',
+          viewBox: "20 20 360 320", 
+          atoms: [{id:'c1',el:'C',x:150,y:150},{id:'c2',el:'C',x:250,y:150},{id:'h1',el:'H',x:90,y:90},{id:'h2',el:'H',x:90,y:210},{id:'h3',el:'H',x:310,y:90},{id:'f',el:'F',x:310,y:210}],
+          bonds: [{id:'b1',from:'c1',to:'c2',type:BondType.DOUBLE},{id:'b2',from:'c1',to:'h1',type:BondType.SINGLE},{id:'b3',from:'c1',to:'h2',type:BondType.SINGLE},{id:'b4',from:'c2',to:'h3',type:BondType.SINGLE},{id:'b5',from:'c2',to:'f',type:BondType.SINGLE}]
+        },
+        {
+          id: 'c2h2cl2', name: '1,1-다이클로로에틸렌', formula: 'C₂H₂Cl₂', description: '한쪽 탄소의 두 수소가 염소로 치환된 에틸렌입니다.',
+          viewBox: "20 20 360 320",
+          atoms: [{id:'c1',el:'C',x:150,y:150},{id:'c2',el:'C',x:250,y:150},{id:'h1',el:'H',x:90,y:90},{id:'h2',el:'H',x:90,y:210},{id:'cl1',el:'Cl',x:310,y:90},{id:'cl2',el:'Cl',x:310,y:210}],
+          bonds: [{id:'b1',from:'c1',to:'c2',type:BondType.DOUBLE},{id:'b2',from:'c1',to:'h1',type:BondType.SINGLE},{id:'b3',from:'c1',to:'h2',type:BondType.SINGLE},{id:'b4',from:'c2',to:'cl1',type:BondType.SINGLE},{id:'b5',from:'c2',to:'cl2',type:BondType.SINGLE}]
+        },
+        {
+          id: 'c2h2f2', name: '1,1-다이플루오로에틸렌', formula: 'C₂H₂F₂', description: '한쪽 탄소의 두 수소가 플루오린으로 치환된 에틸렌입니다.',
+          viewBox: "20 20 360 320",
+          atoms: [{id:'c1',el:'C',x:150,y:150},{id:'c2',el:'C',x:250,y:150},{id:'h1',el:'H',x:90,y:90},{id:'h2',el:'H',x:90,y:210},{id:'f1',el:'F',x:310,y:90},{id:'f2',el:'F',x:310,y:210}],
+          bonds: [{id:'b1',from:'c1',to:'c2',type:BondType.DOUBLE},{id:'b2',from:'c1',to:'h1',type:BondType.SINGLE},{id:'b3',from:'c1',to:'h2',type:BondType.SINGLE},{id:'b4',from:'c2',to:'f1',type:BondType.SINGLE},{id:'b5',from:'c2',to:'f2',type:BondType.SINGLE}]
+        },
+        {
+          id: 'c2h3br', name: '브로모에틸렌', formula: 'C₂H₃Br', description: '수소 하나가 브로민으로 치환된 에틸렌입니다.',
+          viewBox: "20 20 360 320",
+          atoms: [{id:'c1',el:'C',x:150,y:150},{id:'c2',el:'C',x:250,y:150},{id:'h1',el:'H',x:90,y:90},{id:'h2',el:'H',x:90,y:210},{id:'h3',el:'H',x:310,y:90},{id:'br',el:'Br',x:310,y:210}],
+          bonds: [{id:'b1',from:'c1',to:'c2',type:BondType.DOUBLE},{id:'b2',from:'c1',to:'h1',type:BondType.SINGLE},{id:'b3',from:'c1',to:'h2',type:BondType.SINGLE},{id:'b4',from:'c2',to:'h3',type:BondType.SINGLE},{id:'b5',from:'c2',to:'br',type:BondType.SINGLE}]
+        }
+      ];
+
+      const ADVANCED_POOL_4 = [
+        {
+          id: 'ch3oh', name: '메탄올', formula: 'CH₃OH', description: '탄소와 산소의 단일 결합이 있는 분자입니다.',
+          viewBox: "20 20 360 320",
+          atoms: [{id:'c',el:'C',x:150,y:150},{id:'h1',el:'H',x:150,y:70},{id:'h2',el:'H',x:150,y:230},{id:'h3',el:'H',x:70,y:150},{id:'o',el:'O',x:230,y:150},{id:'h4',el:'H',x:290,y:100}],
+          bonds: [{id:'b1',from:'c',to:'h1',type:BondType.SINGLE},{id:'b2',from:'c',to:'h2',type:BondType.SINGLE},{id:'b3',from:'c',to:'h3',type:BondType.SINGLE},{id:'b4',from:'c',to:'o',type:BondType.SINGLE},{id:'b5',from:'o',to:'h4',type:BondType.SINGLE}]
+        },
+        {
+          id: 'ch3nh2', name: '메틸아민', formula: 'CH₃NH₂', description: '탄소와 질소의 결합을 포함합니다.',
+          viewBox: "20 20 360 320",
+          atoms: [{id:'c',el:'C',x:150,y:150},{id:'h1',el:'H',x:150,y:70},{id:'h2',el:'H',x:150,y:230},{id:'h3',el:'H',x:70,y:150},{id:'n',el:'N',x:230,y:150},{id:'h4',el:'H',x:290,y:100},{id:'h5',el:'H',x:290,y:200}],
+          bonds: [{id:'b1',from:'c',to:'h1',type:BondType.SINGLE},{id:'b2',from:'c',to:'h2',type:BondType.SINGLE},{id:'b3',from:'c',to:'h3',type:BondType.SINGLE},{id:'b4',from:'c',to:'n',type:BondType.SINGLE},{id:'b5',from:'n',to:'h4',type:BondType.SINGLE},{id:'b6',from:'n',to:'h5',type:BondType.SINGLE}]
+        },
+        {
+          id: 'ch3sh', name: '메테인싸이올', formula: 'CH₃SH', description: '탄소와 황의 결합을 포함하는 분자입니다.',
+          viewBox: "20 20 360 320",
+          atoms: [{id:'c',el:'C',x:150,y:150},{id:'h1',el:'H',x:150,y:70},{id:'h2',el:'H',x:150,y:230},{id:'h3',el:'H',x:70,y:150},{id:'s',el:'S',x:230,y:150},{id:'h4',el:'H',x:290,y:100}],
+          bonds: [{id:'b1',from:'c',to:'h1',type:BondType.SINGLE},{id:'b2',from:'c',to:'h2',type:BondType.SINGLE},{id:'b3',from:'c',to:'h3',type:BondType.SINGLE},{id:'b4',from:'c',to:'s',type:BondType.SINGLE},{id:'b5',from:'s',to:'h4',type:BondType.SINGLE}]
+        },
+        {
+          id: 'c2h5oh', name: '에탄올', formula: 'C₂H₅OH', description: '탄소 사슬 끝에 하이드록시기가 붙은 분자입니다.',
+          viewBox: "0 20 420 300",
+          atoms: [{id:'c1',el:'C',x:100,y:160},{id:'h1',el:'H',x:100,y:80},{id:'h2',el:'H',x:100,y:240},{id:'h3',el:'H',x:30,y:160},{id:'c2',el:'C',x:180,y:160},{id:'h4',el:'H',x:180,y:80},{id:'h5',el:'H',x:180,y:240},{id:'o',el:'O',x:260,y:160},{id:'h6',el:'H',x:330,y:110}],
+          bonds: [{id:'b1',from:'c1',to:'h1',type:BondType.SINGLE},{id:'b2',from:'c1',to:'h2',type:BondType.SINGLE},{id:'b3',from:'c1',to:'h3',type:BondType.SINGLE},{id:'b4',from:'c1',to:'c2',type:BondType.SINGLE},{id:'b5',from:'c2',to:'h4',type:BondType.SINGLE},{id:'b6',from:'c2',to:'h5',type:BondType.SINGLE},{id:'b7',from:'c2',to:'o',type:BondType.SINGLE},{id:'b8',from:'o',to:'h6',type:BondType.SINGLE}]
+        },
+        {
+          id: 'dma', name: '다이메틸아민', formula: '(CH₃)₂NH', description: '질소에 두 메틸기와 수소가 결합된 분자입니다.',
+          viewBox: "0 20 420 300",
+          atoms: [{id:'c1',el:'C',x:100,y:160},{id:'h1',el:'H',x:100,y:80},{id:'h2',el:'H',x:100,y:240},{id:'h3',el:'H',x:30,y:160},{id:'n',el:'N',x:200,y:160},{id:'h4',el:'H',x:200,y:80},{id:'c2',el:'C',x:300,y:160},{id:'h5',el:'H',x:300,y:80},{id:'h6',el:'H',x:300,y:240},{id:'h7',el:'H',x:370,y:160}],
+          bonds: [{id:'b1',from:'c1',to:'h1',type:BondType.SINGLE},{id:'b2',from:'c1',to:'h2',type:BondType.SINGLE},{id:'b3',from:'c1',to:'h3',type:BondType.SINGLE},{id:'b4',from:'c1',to:'n',type:BondType.SINGLE},{id:'b5',from:'n',to:'h4',type:BondType.SINGLE},{id:'b6',from:'n',to:'c2',type:BondType.SINGLE},{id:'b7',from:'c2',to:'h5',type:BondType.SINGLE},{id:'b8',from:'c2',to:'h6',type:BondType.SINGLE},{id:'b9',from:'c2',to:'h7',type:BondType.SINGLE}]
+        }
+      ];
+
+      const ADVANCED_POOL_5 = [
+        {
+          id: 'hconh2', name: '폼아마이드', formula: 'HCONH₂', description: '펩타이드 결합의 기본 구조를 가집니다.',
+          viewBox: "20 20 360 320", 
+          atoms: [{id:'c',el:'C',x:160,y:150},{id:'o',el:'O',x:160,y:70},{id:'h1',el:'H',x:80,y:150},{id:'n',el:'N',x:240,y:150},{id:'h2',el:'H',x:300,y:100},{id:'h3',el:'H',x:300,y:200}],
+          bonds: [
+            {id:'b1',from:'c',to:'o',type:BondType.DOUBLE},
+            {id:'b2',from:'c',to:'h1',type:BondType.SINGLE},
+            {id:'b3',from:'c',to:'n',type:BondType.SINGLE},
+            {id:'b4',from:'n',to:'h2',type:BondType.SINGLE},
+            {id:'b5',from:'n',to:'h3',type:BondType.SINGLE}
+          ]
+        },
+        {
+          id: 'ch3ocl', name: '메틸 하이포클로라이트', formula: 'CH₃OCl', description: '산소 원자가 탄소와 염소 사이에 결합해 있습니다.',
+          viewBox: "20 20 360 320",
+          atoms: [{id:'c',el:'C',x:140,y:150},{id:'h1',el:'H',x:140,y:70},{id:'h2',el:'H',x:140,y:230},{id:'h3',el:'H',x:60,y:150},{id:'o',el:'O',x:220,y:150},{id:'cl',el:'Cl',x:300,y:210}],
+          bonds: [
+            {id:'b1',from:'c',to:'h1',type:BondType.SINGLE},
+            {id:'b2',from:'c',to:'h2',type:BondType.SINGLE},
+            {id:'b3',from:'c',to:'h3',type:BondType.SINGLE},
+            {id:'b4',from:'c',to:'o',type:BondType.SINGLE},
+            {id:'b5',from:'o',to:'cl',type:BondType.SINGLE}
+          ]
+        },
+        {
+          id: 'hcooh', name: '폼산', formula: 'HCOOH', description: '카복실기를 가진 가장 간단한 카복실산입니다.',
+          viewBox: "20 40 360 260",
+          atoms: [{id:'c',el:'C',x:180,y:160},{id:'h1',el:'H',x:100,y:160},{id:'o1',el:'O',x:180,y:80},{id:'o2',el:'O',x:260,y:200},{id:'h2',el:'H',x:330,y:160}],
+          bonds: [
+            {id:'b1',from:'c',to:'h1',type:BondType.SINGLE},
+            {id:'b2',from:'c',to:'o1',type:BondType.DOUBLE},
+            {id:'b3',from:'c',to:'o2',type:BondType.SINGLE},
+            {id:'b4',from:'o2',to:'h2',type:BondType.SINGLE}
+          ]
+        },
+        {
+          id: 'ch3cn', name: '아세토나이트릴', formula: 'CH₃CN', description: '탄소와 질소의 삼중 결합을 포함하는 분자입니다.',
+          viewBox: "0 40 400 240",
+          atoms: [{id:'c1',el:'C',x:100,y:160},{id:'h1',el:'H',x:100,y:80},{id:'h2',el:'H',x:100,y:240},{id:'h3',el:'H',x:30,y:160},{id:'c2',el:'C',x:200,y:160},{id:'n',el:'N',x:300,y:160}],
+          bonds: [
+            {id:'b1',from:'c1',to:'h1',type:BondType.SINGLE},
+            {id:'b2',from:'c1',to:'h2',type:BondType.SINGLE},
+            {id:'b3',from:'c1',to:'h3',type:BondType.SINGLE},
+            {id:'b4',from:'c1',to:'c2',type:BondType.SINGLE},
+            {id:'b5',from:'c2',to:'n',type:BondType.TRIPLE}
+          ]
+        },
+        {
+          id: 'ch3cho', name: '아세트알데하이드', formula: 'CH₃CHO', description: '메틸기에 알데하이드기가 붙은 분자입니다.',
+          viewBox: "0 20 400 300",
+          atoms: [{id:'c1',el:'C',x:100,y:170},{id:'h1',el:'H',x:100,y:90},{id:'h2',el:'H',x:100,y:250},{id:'h3',el:'H',x:30,y:170},{id:'c2',el:'C',x:200,y:170},{id:'h4',el:'H',x:200,y:250},{id:'o',el:'O',x:280,y:110}],
+          bonds: [
+            {id:'b1',from:'c1',to:'h1',type:BondType.SINGLE},
+            {id:'b2',from:'c1',to:'h2',type:BondType.SINGLE},
+            {id:'b3',from:'c1',to:'h3',type:BondType.SINGLE},
+            {id:'b4',from:'c1',to:'c2',type:BondType.SINGLE},
+            {id:'b5',from:'c2',to:'h4',type:BondType.SINGLE},
+            {id:'b6',from:'c2',to:'o',type:BondType.DOUBLE}
+          ]
+        }
+      ];
+
+      const SPECIAL_POOL = [
+        {
+          id: 'ch3cooh', name: '아세트산', formula: 'CH₃COOH', description: '카복실기가 있는 대표적인 약산입니다.',
+          viewBox: "0 10 380 300",
+          atoms: [
+            {id:'c1',el:'C',x:100,y:150},{id:'h1',el:'H',x:100,y:70},{id:'h2',el:'H',x:100,y:230},{id:'h3',el:'H',x:30,y:150},
+            {id:'c2',el:'C',x:180,y:150},
+            {id:'o1',el:'O',x:180,y:70},
+            {id:'o2',el:'O',x:250,y:180},
+            {id:'h4',el:'H',x:310,y:150}
+          ],
+          bonds: [
+            {id:'b1',from:'c1',to:'h1',type:BondType.SINGLE},{id:'b2',from:'c1',to:'h2',type:BondType.SINGLE},{id:'b3',from:'c1',to:'h3',type:BondType.SINGLE},
+            {id:'b4',from:'c1',to:'c2',type:BondType.SINGLE},
+            {id:'b5',from:'c2',to:'o1',type:BondType.DOUBLE},
+            {id:'b6',from:'c2',to:'o2',type:BondType.SINGLE},
+            {id:'b7',from:'o2',to:'h4',type:BondType.SINGLE}
+          ]
+        },
+        {
+          id: 'glycine', name: '글리신', formula: 'NH₂CH₂COOH', description: '가장 간단한 구조의 아미노산입니다.',
+          viewBox: "0 20 400 300",
+          atoms: [
+            {id:'n',el:'N',x:60,y:150},{id:'h1',el:'H',x:30,y:100},{id:'h2',el:'H',x:30,y:200},
+            {id:'c1',el:'C',x:140,y:150},{id:'h3',el:'H',x:140,y:80},{id:'h4',el:'H',x:140,y:220},
+            {id:'c2',el:'C',x:220,y:150},
+            {id:'o1',el:'O',x:220,y:70},
+            {id:'o2',el:'O',x:290,y:180},
+            {id:'h5',el:'H',x:340,y:150}
+          ],
+          bonds: [
+            {id:'b1',from:'n',to:'h1',type:BondType.SINGLE},{id:'b2',from:'n',to:'h2',type:BondType.SINGLE},
+            {id:'b3',from:'n',to:'c1',type:BondType.SINGLE},
+            {id:'b4',from:'c1',to:'h3',type:BondType.SINGLE},{id:'b5',from:'c1',to:'h4',type:BondType.SINGLE},
+            {id:'b6',from:'c1',to:'c2',type:BondType.SINGLE},
+            {id:'b7',from:'c2',to:'o1',type:BondType.DOUBLE},
+            {id:'b8',from:'c2',to:'o2',type:BondType.SINGLE},
+            {id:'b9',from:'o2',to:'h5',type:BondType.SINGLE}
+          ]
+        }
+      ];
+
+      // ======================================================================
+      // basicpolarity 퀴즈 데이터
+      // ======================================================================
+      
+      const MOLECULES_BASIC = [
+        {
+          id: 'h2', name: '수소 기체', formula: 'H₂',
+          atoms: [{ id: 'a1', symbol: 'H', x: 160, y: 150 }, { id: 'a2', symbol: 'H', x: 240, y: 150 }],
+          bonds: [{ id: 'b1', sourceId: 'a1', targetId: 'a2', type: BondType['single'] }]
+        },
+        {
+          id: 'hcl', name: '염화 수소', formula: 'HCl',
+          atoms: [{ id: 'a1', symbol: 'H', x: 160, y: 150 }, { id: 'a2', symbol: 'Cl', x: 240, y: 150 }],
+          bonds: [{ id: 'b1', sourceId: 'a1', targetId: 'a2', type: BondType['single'] }]
+        },
+        {
+          id: 'h2o', name: '물', formula: 'H₂O',
+          atoms: [{ id: 'a1', symbol: 'O', x: 200, y: 120 }, { id: 'a2', symbol: 'H', x: 140, y: 180 }, { id: 'a3', symbol: 'H', x: 260, y: 180 }],
+          bonds: [{ id: 'b1', sourceId: 'a1', targetId: 'a2', type: BondType['single'] }, { id: 'b2', sourceId: 'a1', targetId: 'a3', type: BondType['single'], visualFlip: true }]
+        },
+        {
+          id: 'co2', name: '이산화 탄소', formula: 'CO₂',
+          atoms: [{ id: 'a1', symbol: 'C', x: 200, y: 150 }, { id: 'a2', symbol: 'O', x: 120, y: 150 }, { id: 'a3', symbol: 'O', x: 280, y: 150 }],
+          bonds: [{ id: 'b1', sourceId: 'a1', targetId: 'a2', type: BondType['double'] }, { id: 'b2', sourceId: 'a1', targetId: 'a3', type: BondType['double'], visualFlip: true }]
+        },
+        {
+          id: 'ch4', name: '메테인', formula: 'CH₄',
+          atoms: [
+            { id: 'a1', symbol: 'C', x: 200, y: 150 }, { id: 'a2', symbol: 'H', x: 200, y: 70 },
+            { id: 'a3', symbol: 'H', x: 280, y: 150 }, { id: 'a4', symbol: 'H', x: 200, y: 230 }, { id: 'a5', symbol: 'H', x: 120, y: 150 }
+          ],
+          bonds: [
+            { id: 'b1', sourceId: 'a1', targetId: 'a2', type: BondType['single'] },
+            { id: 'b2', sourceId: 'a1', targetId: 'a3', type: BondType['single'], visualFlip: true },
+            { id: 'b3', sourceId: 'a1', targetId: 'a4', type: BondType['single'], visualFlip: true },
+            { id: 'b4', sourceId: 'a1', targetId: 'a5', type: BondType['single'] }
+          ]
+        },
+        {
+          id: 'nh3', name: '암모니아', formula: 'NH₃',
+          atoms: [
+            { id: 'a1', symbol: 'N', x: 200, y: 150 }, { id: 'a2', symbol: 'H', x: 120, y: 150 },
+            { id: 'a3', symbol: 'H', x: 280, y: 150 }, { id: 'a4', symbol: 'H', x: 200, y: 230 }
+          ],
+          bonds: [
+            { id: 'b1', sourceId: 'a1', targetId: 'a2', type: BondType['single'] },
+            { id: 'b2', sourceId: 'a1', targetId: 'a3', type: BondType['single'], visualFlip: true },
+            { id: 'b3', sourceId: 'a1', targetId: 'a4', type: BondType['single'], visualFlip: true }
+          ]
+        },
+        {
+          id: 'cl2', name: '염소 기체', formula: 'Cl₂',
+          atoms: [{ id: 'a1', symbol: 'Cl', x: 160, y: 150 }, { id: 'a2', symbol: 'Cl', x: 240, y: 150 }],
+          bonds: [{ id: 'b1', sourceId: 'a1', targetId: 'a2', type: BondType['single'] }]
+        },
+        {
+          id: 'bf3', name: '삼플루오린화 붕소', formula: 'BF₃',
+          atoms: [
+            { id: 'a1', symbol: 'B', x: 200, y: 170 }, { id: 'a2', symbol: 'F', x: 200, y: 90 },
+            { id: 'a3', symbol: 'F', x: 130, y: 220 }, { id: 'a4', symbol: 'F', x: 270, y: 220 }
+          ],
+          bonds: [
+            { id: 'b1', sourceId: 'a1', targetId: 'a2', type: BondType['single'] },
+            { id: 'b2', sourceId: 'a1', targetId: 'a3', type: BondType['single'] },
+            { id: 'b3', sourceId: 'a1', targetId: 'a4', type: BondType['single'], visualFlip: true }
+          ]
+        },
+        {
+          id: 'h2o2', name: '과산화 수소', formula: 'H₂O₂',
+          atoms: [
+            { id: 'a1', symbol: 'O', x: 160, y: 130 }, { id: 'a2', symbol: 'O', x: 240, y: 130 },
+            { id: 'a3', symbol: 'H', x: 120, y: 190 }, { id: 'a4', symbol: 'H', x: 280, y: 190 }
+          ],
+          bonds: [
+            { id: 'b1', sourceId: 'a3', targetId: 'a1', type: BondType['single'] },
+            { id: 'b2', sourceId: 'a1', targetId: 'a2', type: BondType['single'], visualFlip: true },
+            { id: 'b3', sourceId: 'a2', targetId: 'a4', type: BondType['single'], visualFlip: true }
+          ]
+        },
+        {
+          id: 'c2h2', name: '에타인 (아세틸렌)', formula: 'C₂H₂',
+          atoms: [
+            { id: 'a1', symbol: 'C', x: 160, y: 150 }, { id: 'a2', symbol: 'C', x: 240, y: 150 },
+            { id: 'a3', symbol: 'H', x: 80, y: 150 },
+            { id: 'a4', symbol: 'H', x: 320, y: 150 }
+          ],
+          bonds: [
+            { id: 'b1', sourceId: 'a3', targetId: 'a1', type: BondType['single'] },
+            { id: 'b2', sourceId: 'a1', targetId: 'a2', type: BondType['triple'], visualFlip: true },
+            { id: 'b3', sourceId: 'a2', targetId: 'a4', type: BondType['single'] }
+          ]
+        }
+      ];
+
+      // ======================================================================
+      // 공통 유틸리티 함수
+      // ======================================================================
+      
+      const ArrowPathLeft = "M 16 6 L 4 12 L 16 18 M 4 12 L 28 12 M 24 7 L 24 17";
+      const ArrowPathRight = "M 16 6 L 28 12 L 16 18 M 28 12 L 4 12 M 8 7 L 8 17";
+
+      const CheckMark = ({ x, y, isCorrect }) => (
+        <g transform={`translate(${x}, ${y})`}>
+          <circle r="5" fill={isCorrect ? "#22c55e" : "#ef4444"} stroke="white" strokeWidth="1.5" />
+          {isCorrect ? (
+            <path d="M -2.5 0 L -1 1.5 L 2.5 -1.5" stroke="white" strokeWidth="1.5" fill="none" />
+          ) : (
+            <path d="M -2 -2 L 2 2 M 2 -2 L -2 2" stroke="white" strokeWidth="1.5" fill="none" />
+          )}
+        </g>
+      );
+
+      const PeriodicCell = ({ el, num }) => {
+        if (!el) return <div className="aspect-[4/5]" />;
+        return (
+          <div className="aspect-[4/5] flex flex-col items-center justify-center p-1 rounded shadow-sm border border-slate-300" style={{backgroundColor: el.color}}>
+            <span className="text-sm font-bold text-slate-700 leading-none w-full text-left pl-1">{num}</span>
+            <span className="text-3xl font-black text-slate-900 leading-tight my-0.5">{el.symbol}</span>
+            <span className="font-mono font-bold text-slate-900 text-lg leading-none">{el.en}</span>
+          </div>
+        );
+      };
+
+      // ======================================================================
+      // polarityway 퀴즈 컴포넌트 (핵심 부분만)
+      // ======================================================================
+      
+      // polarityway 퀴즈의 핵심 렌더링 함수들은 원본 파일에서 복사해야 합니다.
+      // 여기서는 구조만 보여드립니다.
+      
+      // ======================================================================
+      // basicpolarity 퀴즈 컴포넌트 (핵심 부분만)
+      // ======================================================================
+      
+      const renderBondExplanationContent = (currentMolecule, bond, idx) => {
+        if (!currentMolecule || !bond) return null;
+        const a1 = currentMolecule.atoms.find(a => a.id === bond.sourceId);
+        const a2 = currentMolecule.atoms.find(a => a.id === bond.targetId);
+        if (!a1 || !a2) return null;
+
+        const en1 = ELEMENTS[a1.symbol].en;
+        const en2 = ELEMENTS[a2.symbol].en;
+        const diff = Math.abs(en1 - en2);
+        const isPolar = diff > 0;
+
+        return (
+          <div className="mt-2 p-3 bg-white rounded-lg border border-indigo-100/50 text-sm text-slate-700 leading-relaxed fade-in">
+            {isPolar ? (
+              <>
+                서로 <strong>다른 원자</strong>({a1.symbol}: {en1}, {a2.symbol}: {en2}) 사이의 결합이므로<br/>
+                전기음성도 차이가 <strong>{diff.toFixed(1)}</strong>입니다.<br/>
+                따라서 <span className="text-indigo-600 font-bold underline decoration-wavy">극성 공유 결합</span>입니다.
+              </>
+            ) : (
+              <>
+                서로 <strong>같은 원자</strong>({a1.symbol}) 사이의 결합이므로<br/>
+                전기음성도 차이가 <strong>0</strong>입니다.<br/>
+                따라서 <span className="text-amber-600 font-bold underline decoration-wavy">무극성 공유 결합</span>입니다.
+              </>
+            )}
+          </div>
+        );
+      };
+
+      // ======================================================================
+      // 인트로 메뉴 컴포넌트 (Lab_Simulation 스타일)
+      // ======================================================================
+      
+      const IntroMenu = ({ onSelectQuiz }) => {
+        return (
+          <div className="min-h-screen flex flex-col items-center p-6 fade-in">
+            <div className="flex-1 flex flex-col items-center justify-center w-full max-w-5xl">
+              <div className="text-center mb-12">
+                <span className="text-xs font-bold text-blue-600 uppercase tracking-[0.2em] mb-2 block">Chemistry Quiz</span>
+                <h1 className="text-3xl md:text-5xl font-extrabold text-slate-800 tracking-tight">결합의 극성과 쌍극자 모멘트 퀴즈</h1>
+                <p className="text-slate-500 mt-4 text-base md:text-lg">화학 결합의 원리를 완벽하게 이해해보세요.<br/>원하는 퀴즈를 선택하세요.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+                {/* 결합의 극성 퀴즈 카드 */}
+                <button onClick={() => onSelectQuiz('basicpolarity')} className="menu-card bg-white rounded-3xl p-8 border border-slate-200 text-left group relative overflow-hidden h-72 flex flex-col justify-between">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-full blur-3xl transform translate-x-1/3 -translate-y-1/3 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="inline-block px-3 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-full">Chemistry</span>
+                      <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">기초</span>
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2 group-hover:text-emerald-600 transition-colors">결합의 극성 퀴즈</h2>
+                    <p className="text-slate-500 text-sm leading-relaxed">각 결합이 극성인지 무극성인지 판단하는 퀴즈입니다.</p>
+                  </div>
+                  <div className="relative z-10 flex items-center gap-2 text-slate-400 font-bold text-sm group-hover:text-emerald-600 transition-colors">
+                    <span>퀴즈 시작하기</span>
+                    <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
+                  </div>
+                </button>
+
+                {/* 쌍극자 모멘트 방향 퀴즈 카드 */}
+                <button onClick={() => onSelectQuiz('polarityway')} className="menu-card bg-white rounded-3xl p-8 border border-slate-200 text-left group relative overflow-hidden h-72 flex flex-col justify-between">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-full blur-3xl transform translate-x-1/3 -translate-y-1/3 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="inline-block px-3 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-full">Chemistry</span>
+                      <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">심화</span>
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2 group-hover:text-blue-600 transition-colors">쌍극자 모멘트 방향 퀴즈</h2>
+                    <p className="text-slate-500 text-sm leading-relaxed">결합의 극성과 쌍극자모멘트의 방향을 판단하는 퀴즈입니다.</p>
+                  </div>
+                  <div className="relative z-10 flex items-center gap-2 text-slate-400 font-bold text-sm group-hover:text-blue-600 transition-colors">
+                    <span>퀴즈 시작하기</span>
+                    <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <Footer />
+          </div>
+        );
+      };
+
+      // ======================================================================
+      // polarityway 퀴즈 렌더링 함수들
+      // ======================================================================
+      
+      const renderBondLine = (bond, start, end, bondAnswer, showResult) => {
+         let strokeColor = '#cbd5e1'; 
+         if (bondAnswer) { strokeColor = '#22c55e'; }
+
+         const lines = [];
+         const width = 7; 
+
+         if (bond.type === BondType.SINGLE || bond.type === 1) {
+           lines.push(<line key="s" x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke={strokeColor} strokeWidth={width} strokeLinecap="round" />);
+         } else if (bond.type === BondType.DOUBLE || bond.type === 2) {
+           const dx = end.x - start.x;
+           const dy = end.y - start.y;
+           const len = Math.sqrt(dx*dx + dy*dy);
+           const nx = -dy/len * 5;
+           const ny = dx/len * 5;
+           lines.push(<line key="d1" x1={start.x+nx} y1={start.y+ny} x2={end.x+nx} y2={end.y+ny} stroke={strokeColor} strokeWidth={width-2} strokeLinecap="round" />);
+           lines.push(<line key="d2" x1={start.x-nx} y1={start.y-ny} x2={end.x-nx} y2={end.y-ny} stroke={strokeColor} strokeWidth={width-2} strokeLinecap="round" />);
+         } else {
+           lines.push(<line key="t1" x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke={strokeColor} strokeWidth={width} strokeLinecap="round" />);
+           const dx = end.x - start.x;
+           const dy = end.y - start.y;
+           const len = Math.sqrt(dx*dx + dy*dy);
+           const nx = -dy/len * 9;
+           const ny = dx/len * 9;
+           lines.push(<line key="t2" x1={start.x+nx} y1={start.y+ny} x2={end.x+nx} y2={end.y+ny} stroke={strokeColor} strokeWidth={2} strokeLinecap="round" />);
+           lines.push(<line key="t3" x1={start.x-nx} y1={start.y-ny} x2={end.x-nx} y2={end.y-ny} stroke={strokeColor} strokeWidth={2} strokeLinecap="round" />);
+         }
+
+         return <g key={`bond-${bond.id}`}>{lines}</g>;
+      };
+
+      const renderInputControls = (bond, start, end, bondAnswer, index, onAnswerBond, errorBondId) => {
+        const mx = (start.x + end.x) / 2;
+        const my = (start.y + end.y) / 2;
+        
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        
+        let isFlipped = false;
+        if (angle > 90 || angle < -90) {
+          angle += 180;
+          isFlipped = true;
+        }
+
+        const isEven = index % 2 === 0;
+        let placement = bond.placement; 
+        if (!placement) {
+          placement = isEven ? 'up' : 'down';
+        }
+        
+        const baseOffset = 40; 
+        const offsetY = placement === 'up' ? -baseOffset : baseOffset;
+
+        const btnW = 30; 
+        const btnH = 24; 
+        const totalW = btnW * 3;
+        
+        const getStyle = (type) => {
+           if (bondAnswer === type) {
+             if (type === 'nonpolar') return { fill: '#fbbf24', stroke: '#d97706', icon: 'white', text: '#78350f' }; 
+             return { fill: '#3b82f6', stroke: '#2563eb', icon: 'white', text: '#1e3a8a' }; 
+           }
+           if (errorBondId === bond.id) {
+              return { fill: '#fee2e2', stroke: '#ef4444', icon: '#ef4444', text: '#ef4444' };
+           }
+           return { fill: 'white', stroke: '#cbd5e1', icon: '#94a3b8', text: '#475569' };
+        }
+
+        const leftBtnValue = isFlipped ? 'to-end' : 'to-start';
+        const rightBtnValue = isFlipped ? 'to-start' : 'to-end';
+
+        const styleLeft = getStyle(leftBtnValue);
+        const styleMid = getStyle('nonpolar');
+        const styleRight = getStyle(rightBtnValue);
+
+        const textStyle = { fontSize: '9px', fontWeight: '900', fontFamily: 'Noto Sans KR, sans-serif' };
+        
+        const shakeClass = errorBondId === bond.id ? 'animate-shake' : 'animate-pop';
+
+        return (
+          <g key={`ctrl-${bond.id}`} transform={`translate(${mx}, ${my}) rotate(${angle})`} style={{ cursor: 'pointer' }}>
+             <g className={shakeClass}>
+               <g transform={`translate(0, ${offsetY})`}>
+                   <line x1="0" y1={placement === 'up' ? 10 : -10} x2="0" y2={placement === 'up' ? offsetY*-1 + 5 : offsetY*-1 - 5} stroke="#94a3b8" strokeWidth="1" strokeDasharray="2,2" />
+                   <circle cx="0" cy={placement === 'up' ? offsetY*-1 : offsetY*-1} r="4" fill="#3b82f6" className="target-point" />
+
+                   <defs>
+                     <filter id="floatShadow" x="-20%" y="-20%" width="140%" height="140%">
+                       <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" floodOpacity="0.15"/>
+                     </filter>
+                   </defs>
+                   <g filter="url(#floatShadow)">
+                       <g onClick={(e) => { e.stopPropagation(); onAnswerBond(bond.id, leftBtnValue); }}>
+                         <path d={`M ${-totalW/2} ${-btnH/2} L ${-btnW/2} ${-btnH/2} L ${-btnW/2} ${btnH/2} L ${-totalW/2} ${btnH/2} A 6 6 0 0 1 ${-totalW/2} ${-btnH/2}`} fill={styleLeft.fill} stroke={styleLeft.stroke} strokeWidth="1"/>
+                         <g transform={`translate(${-btnW - btnW/2}, -6) scale(0.6)`}>
+                            <path d={ArrowPathLeft} stroke={styleLeft.icon} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" transform="translate(-16, -12)"/>
+                         </g>
+                         <text x={-btnW - btnW/2} y={7} textAnchor="middle" fill={styleLeft.isSelected ? 'white' : styleLeft.text} style={textStyle}>극성</text>
+                       </g>
+                       <g onClick={(e) => { e.stopPropagation(); onAnswerBond(bond.id, 'nonpolar'); }}>
+                         <rect x={-btnW/2} y={-btnH/2} width={btnW} height={btnH} fill={styleMid.fill} stroke={styleMid.stroke} strokeWidth="1"/>
+                         <circle cx="0" cy="-6" r="3.5" stroke={styleMid.icon} strokeWidth="2" fill="none" />
+                         <text x="0" y={7} textAnchor="middle" fill={styleMid.isSelected ? 'white' : styleMid.text} style={textStyle}>무극성</text>
+                       </g>
+                       <g onClick={(e) => { e.stopPropagation(); onAnswerBond(bond.id, rightBtnValue); }}>
+                         <path d={`M ${btnW/2} ${-btnH/2} L ${totalW/2} ${-btnH/2} A 6 6 0 0 1 ${totalW/2} ${btnH/2} L ${btnW/2} ${btnH/2} Z`} fill={styleRight.fill} stroke={styleRight.stroke} strokeWidth="1"/>
+                         <g transform={`translate(${btnW + btnW/2}, -6) scale(0.6)`}>
+                            <path d={ArrowPathRight} stroke={styleRight.icon} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" transform="translate(-16, -12)"/>
+                         </g>
+                         <text x={btnW + btnW/2} y={7} textAnchor="middle" fill={styleRight.isSelected ? 'white' : styleRight.text} style={textStyle}>극성</text>
+                       </g>
+                   </g>
+               </g>
+             </g>
+          </g>
+        );
+      };
+
+      const renderResultDipole = (bond, start, end, el1, el2, bondAnswer) => {
+        const en1 = ELEMENTS[el1].en;
+        const en2 = ELEMENTS[el2].en;
+        const diff = Math.abs(en1 - en2);
+        
+        const mx = (start.x + end.x) / 2;
+        const my = (start.y + end.y) / 2;
+
+        let correctType = 'nonpolar';
+        if (en1 > en2) correctType = 'to-start';
+        else if (en2 > en1) correctType = 'to-end';
+        
+        const isCorrect = bondAnswer === correctType;
+
+        if (diff === 0) {
+          return (
+            <g className="animate-pop" key={`dipole-${bond.id}`}>
+              <rect x={mx - 24} y={my + 10} width="48" height="10" rx="3" fill="white" opacity="0.9" stroke="#fbbf24" strokeWidth="1"/>
+              <text x={mx} y={my + 17} textAnchor="middle" fill="#b45309" fontSize="7" fontWeight="900">무극성 공유결합</text>
+              <CheckMark x={mx - 30} y={my + 15} isCorrect={isCorrect} />
+            </g>
+          );
+        }
+
+        const isToStart = en1 > en2;
+        const fromPt = isToStart ? end : start;
+        const toPt = isToStart ? start : end;
+        
+        const dx = toPt.x - fromPt.x;
+        const dy = toPt.y - fromPt.y;
+        
+        const ux = dx / Math.sqrt(dx*dx + dy*dy);
+        const uy = dy / Math.sqrt(dx*dx + dy*dy);
+        
+        const gap = 18; 
+        const arrowStart = { x: fromPt.x + ux * gap, y: fromPt.y + uy * gap };
+        const arrowEnd = { x: toPt.x - ux * gap, y: toPt.y - uy * gap };
+        
+        const arrowHeadLength = 12;
+        const arrowHeadWidth = 10;
+        const adx = arrowEnd.x - arrowStart.x;
+        const ady = arrowEnd.y - arrowStart.y;
+        const aLen = Math.sqrt(adx * adx + ady * ady);
+        
+        if (aLen < 5) return null;
+        
+        const aux = adx / aLen;
+        const auy = ady / aLen;
+        const anx = -auy;
+        const any = aux;
+
+        const headBaseX = arrowEnd.x - aux * arrowHeadLength;
+        const headBaseY = arrowEnd.y - auy * arrowHeadLength;
+        const tipX = arrowEnd.x;
+        const tipY = arrowEnd.y;
+        const wing1X = headBaseX + anx * (arrowHeadWidth / 2);
+        const wing1Y = headBaseY + any * (arrowHeadWidth / 2);
+        const wing2X = headBaseX - anx * (arrowHeadWidth / 2);
+        const wing2Y = headBaseY - any * (arrowHeadWidth / 2);
+
+        const deltaShiftRatio = 0.25; 
+        
+        const d1BaseX = fromPt.x + (toPt.x - fromPt.x) * deltaShiftRatio;
+        const d1BaseY = fromPt.y + (toPt.y - fromPt.y) * deltaShiftRatio;
+        const d2BaseX = toPt.x + (fromPt.x - toPt.x) * deltaShiftRatio;
+        const d2BaseY = toPt.y + (fromPt.y - toPt.y) * deltaShiftRatio;
+
+        let normalX = -uy;
+        let normalY = ux;
+        if (normalY > 0) { normalX = -normalX; normalY = -normalY; } 
+
+        const d1x = d1BaseX + normalX * 2.0; 
+        const d1y = d1BaseY + normalY * 2.0;
+        const d2x = d2BaseX + normalX * 2.0;
+        const d2y = d2BaseY + normalY * 2.0;
+
+        const safeD1x = Math.max(20, Math.min(380, d1x));
+        const safeD2x = Math.max(20, Math.min(380, d2x));
+
+        const protrusion = 7;
+        const shaftStartX = arrowStart.x - ux * protrusion;
+        const shaftStartY = arrowStart.y - uy * protrusion;
+
+        const crossSize = 10;
+        const crossX1 = arrowStart.x + anx * (crossSize / 2);
+        const crossY1 = arrowStart.y + any * (crossSize / 2);
+        const crossX2 = arrowStart.x - anx * (crossSize / 2);
+        const crossY2 = arrowStart.y - any * (crossSize / 2);
+
+        return (
+          <g className="animate-pop" key={`dipole-${bond.id}`} style={{ pointerEvents: 'none' }}>
+            <line x1={shaftStartX} y1={shaftStartY} x2={headBaseX} y2={headBaseY} stroke="#dc2626" strokeWidth="3" strokeLinecap="butt" />
+            <polygon points={`${tipX},${tipY} ${wing1X},${wing1Y} ${wing2X},${wing2Y}`} fill="#dc2626" />
+            <line x1={crossX1} y1={crossY1} x2={crossX2} y2={crossY2} stroke="#dc2626" strokeWidth="3" strokeLinecap="square" />
+            <g>
+              <circle cx={safeD1x} cy={d1y-3} r="6" fill="white" opacity="0.8"/>
+              <text x={safeD1x} y={d1y} textAnchor="middle" fill="#dc2626" fontSize="10" fontWeight="900" style={{ textShadow: "0px 0px 3px white" }}>δ+</text>
+              <circle cx={safeD2x} cy={d2y-3} r="6" fill="white" opacity="0.8"/>
+              <text x={safeD2x} y={d2y} textAnchor="middle" fill="#dc2626" fontSize="10" fontWeight="900" style={{ textShadow: "0px 0px 3px white" }}>δ-</text>
+            </g>
+            <rect x={mx - 24} y={my + 10} width="48" height="10" rx="3" fill="white" opacity="0.9" stroke="#f87171" strokeWidth="1"/>
+            <text x={mx} y={my + 17} textAnchor="middle" fill="#dc2626" fontSize="8" fontWeight="900">극성 공유결합</text>
+            <CheckMark x={mx - 30} y={my + 15} isCorrect={isCorrect} />
+          </g>
+        );
+      };
+
+      // polarityway MoleculeViewer
+      const PolarityWayMoleculeViewer = ({ data, userAnswers, showResult, onAnswerBond, errorBondId, level }) => {
+        return (
+          <div className="w-full bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden relative molecule-viewer-container">
+            <svg viewBox={data.viewBox || "0 0 400 300"} className="w-full h-auto select-none touch-action-manipulation">
+              <defs>
+                <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="2" dy="2" stdDeviation="2" floodOpacity="0.1"/>
+                </filter>
+              </defs>
+              {data.bonds.map((bond, idx) => {
+                const start = data.atoms.find(a => a.id === bond.from);
+                const end = data.atoms.find(a => a.id === bond.to);
+                const bondWithEl = { ...bond, from_el: start.el, to_el: end.el };
+                return renderBondLine(bondWithEl, start, end, userAnswers[bond.id], !!userAnswers[bond.id]);
+              })}
+              {data.atoms.map(atom => {
+                const elInfo = ELEMENTS[atom.el];
+                return (
+                  <g key={atom.id}>
+                    <circle cx={atom.x} cy={atom.y} r="22" fill={elInfo.color} stroke="#94a3b8" strokeWidth="2" filter="url(#shadow)" />
+                    <text x={atom.x} y={atom.y} dy="6" textAnchor="middle" fill={elInfo.textColor} fontWeight="bold" fontSize="18" fontFamily="serif">
+                      {elInfo.symbol}
+                    </text>
+                    {showResult && (
+                      <text x={atom.x} y={atom.y+38} textAnchor="middle" fill="#64748b" fontSize="12" fontWeight="bold" fontFamily="monospace">
+                        {elInfo.en}
+                      </text>
+                    )}
+                  </g>
+                )
+              })}
+              
+              {data.bonds.map(bond => {
+                if (!userAnswers[bond.id]) return null;
+                const start = data.atoms.find(a => a.id === bond.from);
+                const end = data.atoms.find(a => a.id === bond.to);
+                return renderResultDipole(bond, start, end, start.el, end.el, userAnswers[bond.id]);
+              })}
+
+              {data.bonds.map((bond, idx) => {
+                if (userAnswers[bond.id]) return null;
+                
+                if (level === 'advanced') {
+                  const prevBondSolved = idx === 0 || userAnswers[data.bonds[idx-1].id];
+                  if (!prevBondSolved) return null;
+                }
+
+                const start = data.atoms.find(a => a.id === bond.from);
+                const end = data.atoms.find(a => a.id === bond.to);
+                return renderInputControls(bond, start, end, userAnswers[bond.id], idx, onAnswerBond, errorBondId);
+              })}
+            </svg>
+            {Object.keys(userAnswers).length === 0 && (
+              <div className="absolute top-2 left-0 right-0 text-center pointer-events-none opacity-70">
+                <span className="bg-slate-800 text-white text-[10px] px-3 py-1 rounded-full shadow-lg font-bold">
+                  👆 버튼을 눌러 결합의 쌍극자 모멘트 방향을 선택하세요
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      // Universal Guide Component
+      const UniversalGuide = ({ onClose }) => (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-pop">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+             <div className="p-5 bg-slate-50 border-b flex justify-between items-center">
+                <h3 className="font-bold text-xl">쌍극자 모멘트의 방향 판단 방법</h3>
+                <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full">✕</button>
+             </div>
+             <div className="p-6 overflow-y-auto text-slate-700 space-y-4 leading-relaxed">
+               <p><strong>1. 전기음성도 비교:</strong> 결합된 두 원자의 전기음성도를 확인합니다.</p>
+               <p><strong>2. 전자의 치우침:</strong> 전기음성도가 <strong>더 큰 원자</strong> 쪽으로 공유 전자쌍이 끌려갑니다.</p>
+               <p><strong>3. 부분 전하:</strong> 전자를 얻은 쪽은 <strong>부분 음전하(δ-)</strong>, 잃은 쪽은 <strong>부분 양전하(δ+)</strong>를 띱니다.</p>
+               <p><strong>4. 화살표 방향:</strong> 쌍극자 모멘트 화살표는 <strong>δ+에서 δ- 방향</strong>으로 그립니다. (꼬리에 십자 표시가 있는 쪽이 양전하입니다.)</p>
+               <div className="bg-slate-100 p-3 rounded text-sm">
+                 <strong>예시:</strong> H(2.2) - Cl(3.2)<br/>
+                 Cl이 더 크므로 전자쌍이 Cl 쪽으로 쏠림.<br/>
+                 H(δ+) → Cl(δ-)
+               </div>
+               <p><strong>5. 무극성 공유결합:</strong> 같은 종류의 원자는 전기음성도 차이가 0이므로 전자쌍이 치우치지 않습니다.</p>
+             </div>
+          </div>
+        </div>
+      );
+
+      // ======================================================================
+      // basicpolarity 퀴즈 컴포넌트
+      // ======================================================================
+      
+      // basicpolarity MoleculeViewer
+      const BasicPolarityMoleculeViewer = ({ molecule, selectedBondId, onBondClick, userGuesses, showResults, onAnswerSelect, correctBonds }) => {
+        const getAtom = (id) => molecule.atoms.find(a => a.id === id);
+
+        return (
+          <div className="w-full molecule-viewer-container-basic h-[400px] bg-white rounded-xl shadow-inner border border-slate-200 relative overflow-hidden select-none">
+            <svg className="w-full h-full" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet">
+              {molecule.bonds.map((bond, index) => {
+                const start = getAtom(bond.sourceId);
+                const end = getAtom(bond.targetId);
+                if (!start || !end) return null;
+
+                const isBondSelected = selectedBondId === bond.id;
+                const guess = userGuesses[bond.id];
+                
+                let strokeColor = '#cbd5e1'; 
+                let strokeWidth = 6;
+                
+                if (showResults) {
+                  const en1 = ELEMENTS[start.symbol].en;
+                  const en2 = ELEMENTS[end.symbol].en;
+                  const diff = Math.abs(en1 - en2);
+                  const isPolarActual = diff > 0;
+                  const userIsCorrect = (isPolarActual && guess === BondPolarity.POLAR) || (!isPolarActual && guess === BondPolarity.NON_POLAR);
+                  strokeColor = userIsCorrect ? '#86efac' : '#fca5a5';
+                } else {
+                  if (guess) {
+                    strokeColor = '#93c5fd';
+                  } else {
+                    strokeColor = '#cbd5e1';
+                  }
+                  if (isBondSelected) strokeColor = '#6366f1';
+                }
+                
+                const midX = (start.x + end.x) / 2;
+                const midY = (start.y + end.y) / 2;
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                let nx = -dy / len;
+                let ny = dx / len;
+                if (bond.visualFlip) { nx = -nx; ny = -ny; }
+
+                const numberOffset = -28; 
+                const labelX = midX + nx * numberOffset;
+                const labelY = midY + ny * numberOffset;
+
+                const bondType = bond.type === BondType['triple'] ? BondType.TRIPLE : bond.type === BondType['double'] ? BondType.DOUBLE : BondType.SINGLE;
+
+                return (
+                  <g 
+                    key={bond.id} 
+                    onClick={() => !showResults && onBondClick(bond.id)}
+                    className={!showResults ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}
+                  >
+                    <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="transparent" strokeWidth="40" />
+                    {bondType === BondType.TRIPLE ? (
+                      <g>
+                          <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke={strokeColor} strokeWidth={9} />
+                          <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="white" strokeWidth={3} />
+                      </g>
+                    ) : bondType === BondType.DOUBLE ? (
+                      <g>
+                          <line x1={start.x - 3} y1={start.y - 3} x2={end.x - 3} y2={end.y - 3} stroke={strokeColor} strokeWidth={4} />
+                          <line x1={start.x + 3} y1={start.y + 3} x2={end.x + 3} y2={end.y + 3} stroke={strokeColor} strokeWidth={4} />
+                      </g>
+                    ) : (
+                      <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke={strokeColor} strokeWidth={strokeWidth} />
+                    )}
+                    <circle cx={labelX} cy={labelY} r="8" fill="white" stroke="#64748b" strokeWidth="1.5" />
+                    <text x={labelX} y={labelY} dy="0.35em" textAnchor="middle" className="text-[10px] font-extrabold fill-slate-600 pointer-events-none" style={{ fontFamily: 'Inter, sans-serif' }}>
+                      {index + 1}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {molecule.atoms.map((atom) => {
+                const data = ELEMENTS[atom.symbol];
+                return (
+                  <g key={atom.id} className="pointer-events-none">
+                    <circle cx={atom.x} cy={atom.y} r="22" fill={data.color} stroke="#475569" strokeWidth="2" className="shadow-sm" />
+                    <text x={atom.x} y={atom.y} dy="0.35em" textAnchor="middle" className="font-serif font-bold text-lg fill-slate-900">{atom.symbol}</text>
+                    {showResults && (
+                      <text x={atom.x} y={atom.y + 35} textAnchor="middle" className="text-[10px] fill-slate-500 font-mono font-bold">{data.en.toFixed(1)}</text>
+                    )}
+                  </g>
+                );
+              })}
+
+              {showResults && molecule.bonds.map((bond) => {
+                  const start = getAtom(bond.sourceId);
+                  const end = getAtom(bond.targetId);
+                  if (!start || !end) return null;
+                  const en1 = ELEMENTS[start.symbol].en;
+                  const en2 = ELEMENTS[end.symbol].en;
+                  if (Math.abs(en1 - en2) === 0) return null;
+
+                  const dx = end.x - start.x;
+                  const dy = end.y - start.y;
+                  const len = Math.sqrt(dx * dx + dy * dy);
+                  const ux = dx / len;
+                  const uy = dy / len;
+                  let nx = -uy;
+                  let ny = ux;
+                  const offset = 0; 
+                  
+                  let padding = 26; 
+                  if (len < 60) padding = Math.max(15, len / 2 - 10);
+
+                  let tailX, tailY, headX, headY;
+                  if (en2 > en1) {
+                      tailX = start.x + ux * padding + nx * offset;
+                      tailY = start.y + uy * padding + ny * offset;
+                      headX = end.x - ux * padding + nx * offset;
+                      headY = end.y - uy * padding + ny * offset;
+                  } else {
+                      tailX = end.x - ux * padding + nx * offset;
+                      tailY = end.y - uy * padding + ny * offset;
+                      headX = start.x + ux * padding + nx * offset;
+                      headY = start.y + uy * padding + ny * offset;
+                  }
+
+                  const arrowHeadLength = 12;
+                  const arrowHeadWidth = 10;
+                  const adx = headX - tailX;
+                  const ady = headY - tailY;
+                  const aLen = Math.sqrt(adx * adx + ady * ady);
+                  if (aLen < 5) return null;
+
+                  const aux = adx / aLen;
+                  const auy = ady / aLen;
+                  const anx = -auy; 
+                  const any = aux;
+
+                  const headBaseX = headX - aux * arrowHeadLength;
+                  const headBaseY = headY - auy * arrowHeadLength;
+                  const tipX = headX; const tipY = headY;
+                  const wing1X = headBaseX + anx * (arrowHeadWidth / 2);
+                  const wing1Y = headBaseY + any * (arrowHeadWidth / 2);
+                  const wing2X = headBaseX - anx * (arrowHeadWidth / 2);
+                  const wing2Y = headBaseY - any * (arrowHeadWidth / 2);
+
+                  const crossSize = 10;
+                  const crossX1 = tailX + anx * (crossSize / 2);
+                  const crossY1 = tailY + any * (crossSize / 2);
+                  const crossX2 = tailX - anx * (crossSize / 2);
+                  const crossY2 = tailY - any * (crossSize / 2);
+
+                  const protrusion = 7;
+                  const shaftStartX = tailX - aux * protrusion;
+                  const shaftStartY = tailY - auy * protrusion;
+                  
+                  const labelOffset = bond.visualFlip ? -28 : 28; 
+
+                  return (
+                    <g key={`dipole-${bond.id}`} className="fade-in delay-300">
+                      <line x1={shaftStartX} y1={shaftStartY} x2={headBaseX} y2={headBaseY} stroke="#dc2626" strokeWidth="3" strokeLinecap="butt" />
+                      <polygon points={`${tipX},${tipY} ${wing1X},${wing1Y} ${wing2X},${wing2Y}`} fill="#dc2626" />
+                      <line x1={crossX1} y1={crossY1} x2={crossX2} y2={crossY2} stroke="#dc2626" strokeWidth="3" strokeLinecap="square" />
+                      <g className="fill-red-600 font-serif font-bold italic text-xs fade-in delay-500">
+                          <text x={tailX} y={tailY} dx={anx * labelOffset} dy={any * labelOffset} textAnchor="middle" alignmentBaseline="middle">δ+</text>
+                          <text x={tipX} y={tipY} dx={anx * labelOffset} dy={any * labelOffset} textAnchor="middle" alignmentBaseline="middle">δ-</text>
+                      </g>
+                    </g>
+                  );
+              })}
+            </svg>
+          </div>
+        );
+      };
+
+      // ======================================================================
+      // PolarityWayQuiz 컴포넌트 (polarityway 퀴즈 전체 로직)
+      // ======================================================================
+      
+      const PolarityWayQuiz = ({ onBack }) => {
+        const [mode, setMode] = useState('menu'); 
+        const [level, setLevel] = useState(null);
+        const [step, setStep] = useState(0);
+        const [userAnswers, setUserAnswers] = useState({}); 
+        const [showResult, setShowResult] = useState(false);
+        const [showTable, setShowTable] = useState(false);
+        const [showGuide, setShowGuide] = useState(false);
+        const [completed, setCompleted] = useState(false);
+        const [errorBondId, setErrorBondId] = useState(null);
+        const [timer, setTimer] = useState(0);
+        const [mistakeCount, setMistakeCount] = useState(0);
+        const [quizList, setQuizList] = useState([]);
+        const [history, setHistory] = useState([]);
+        const [reviewIndex, setReviewIndex] = useState(null);
+        const [mistakeHistory, setMistakeHistory] = useState([]);
+        const timerRef = useRef(null);
+
+        useEffect(() => {
+          if (mode === 'quiz' && level === 'advanced' && !completed && !showResult) {
+            timerRef.current = setInterval(() => {
+              setTimer(t => t + 1);
+            }, 1000);
+          } else {
+            clearInterval(timerRef.current);
+          }
+          return () => clearInterval(timerRef.current);
+        }, [mode, level, completed, showResult]);
+
+        const formatTime = (sec) => {
+          const m = Math.floor(sec / 60);
+          const s = sec % 60;
+          return `${m}분 ${s}초`;
+        };
+
+        const handleLevelSelect = (lvl) => {
+          setLevel(lvl);
+          setMode('quiz');
+          setStep(0);
+          setUserAnswers({});
+          setShowResult(false);
+          setCompleted(false);
+          setTimer(0);
+          setMistakeCount(0);
+          setHistory([]);
+          setReviewIndex(null);
+          setMistakeHistory([]);
+
+          if (lvl === 'beginner' || lvl === 'intermediate') {
+            setQuizList(QUIZ_DATA_FIXED[lvl]);
+          } else if (lvl === 'advanced') {
+            const q1 = ADVANCED_POOL_1.sort(() => 0.5 - Math.random())[0];
+            const q2 = ADVANCED_POOL_2.sort(() => 0.5 - Math.random())[0];
+            const q3 = ADVANCED_POOL_3.sort(() => 0.5 - Math.random())[0];
+            const q4 = ADVANCED_POOL_4.sort(() => 0.5 - Math.random())[0];
+            const q5 = ADVANCED_POOL_5.sort(() => 0.5 - Math.random())[0];
+            const q6 = SPECIAL_POOL.sort(() => 0.5 - Math.random())[0];
+            setQuizList([q1, q2, q3, q4, q5, q6]);
+          }
+        };
+
+        const currentQuiz = quizList[step] || {};
+
+        const goHome = () => {
+          onBack();
+        };
+
+        const handleAnswerBond = (bondId, type) => {
+          const bond = currentQuiz.bonds.find(b => b.id === bondId);
+          const atom1 = currentQuiz.atoms.find(a => a.id === bond.from);
+          const atom2 = currentQuiz.atoms.find(a => a.id === bond.to);
+          const en1 = ELEMENTS[atom1.el].en;
+          const en2 = ELEMENTS[atom2.el].en;
+
+          let correctType = 'nonpolar';
+          if (en1 > en2) correctType = 'to-start';
+          else if (en2 > en1) correctType = 'to-end';
+
+          if (type === correctType) {
+            setUserAnswers(prev => {
+              const newState = { ...prev, [bondId]: type };
+              if (Object.keys(newState).length === currentQuiz.bonds.length) {
+                setShowResult(true);
+              }
+              return newState;
+            });
+            setErrorBondId(null);
+          } else {
+            setErrorBondId(bondId);
+            setMistakeCount(prev => prev + 1);
+            setMistakeHistory(prev => {
+              const newHist = [...prev];
+              if (!newHist[step]) {
+                newHist[step] = [];
+              }
+              if (!newHist[step].includes(bondId)) {
+                newHist[step] = [...newHist[step], bondId];
+              }
+              return newHist;
+            });
+            setTimeout(() => setErrorBondId(null), 500);
+          }
+        };
+
+        const nextStep = () => {
+          setHistory(prev => {
+            const newHist = [...prev];
+            newHist[step] = userAnswers; 
+            return newHist;
+          });
+
+          if (step < quizList.length - 1) {
+            setStep(prev => prev + 1);
+            setUserAnswers({});
+            setShowResult(false);
+          } else {
+            setCompleted(true);
+          }
+        };
+        
+        const hasMistakeInQuiz = (quizIndex) => {
+          return mistakeHistory[quizIndex] && mistakeHistory[quizIndex].length > 0;
+        };
+
+        const prevStep = () => {
+          if (step > 0) {
+            setStep(prev => prev - 1);
+            const prevAnswers = history[step - 1];
+            if (prevAnswers) {
+                setUserAnswers(prevAnswers);
+                setShowResult(true); 
+            } else {
+                setUserAnswers({});
+                setShowResult(false);
+            }
+          }
+        };
+
+        const resetGame = () => {
+          handleLevelSelect(level);
+        };
+
+        if (mode === 'menu') {
+          return (
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+              <div className="flex-1 flex flex-col items-center justify-center w-full max-w-md space-y-6">
+                <div className="text-center mb-8">
+                  <h1 className="text-3xl font-black text-slate-900 mb-2 leading-tight">쌍극자 모멘트 방향<br/>상급 타임어택</h1>
+                  <p className="text-slate-500 text-sm mt-2">랜덤 출제되는 6문제를 최대한 빠르게 풀어보세요!</p>
+                </div>
+                <button onClick={() => handleLevelSelect('advanced')} className="w-full max-w-xs bg-purple-500 hover:bg-purple-600 text-white font-bold py-5 rounded-2xl shadow-lg btn-press text-xl flex flex-col items-center relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 bg-red-500 text-white text-[10px] px-2 py-1 rounded-bl-lg font-black animate-pulse">TIME ATTACK</div>
+                  <span>🌳 상급 시작</span>
+                  <span className="text-sm font-normal opacity-90">랜덤 출제 + 타임어택 도전!</span>
+                </button>
+              </div>
+              <div className="w-full flex flex-col items-center mt-8 mb-4">
+                <Footer />
+              </div>
+            </div>
+          );
+        }
+
+        if (completed) {
+          return (
+            <div className="flex flex-col min-h-screen bg-slate-50">
+                <div className="flex-1 p-6 flex flex-col items-center">
+                  <div className="text-7xl mb-6 animate-float">🎉</div>
+                  <h1 className="text-3xl font-bold text-slate-800 mb-4 text-center">
+                    {level === 'beginner' ? '초급' : level === 'intermediate' ? '중급' : '상급'} 클리어!
+                  </h1>
+                  <p className="text-xl text-slate-600 mb-6 text-center font-bold">
+                    훌륭해요!
+                  </p>
+
+                  {level === 'advanced' && (
+                    <div className="w-full max-w-xs bg-purple-50 p-4 rounded-xl border border-purple-200 mb-8 space-y-2">
+                      <p className="text-purple-700 font-bold flex justify-between">
+                        <span>⏱ 소요 시간:</span> <span className="font-mono text-xl">{formatTime(timer)}</span>
+                      </p>
+                      <p className="text-red-600 font-bold flex justify-between">
+                        <span>💔 실수 횟수:</span> <span className="font-mono text-xl">{mistakeCount}회</span>
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="w-full max-w-md clean-panel overflow-hidden mb-8">
+                    <div className="p-4 bg-slate-100 font-bold text-slate-700 border-b border-slate-200 flex items-center gap-2">
+                        <span>📝 출제 문항 다시보기</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {quizList.map((quiz, idx) => {
+                        const hasMistake = hasMistakeInQuiz(idx);
+                        return (
+                          <button 
+                            key={quiz.id}
+                            onClick={() => setReviewIndex(idx)}
+                            className="w-full p-4 text-left hover:bg-slate-50 flex justify-between items-center transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-800">Q{idx + 1}. {quiz.name} <span className="text-slate-400 text-sm font-normal">({quiz.formula})</span></span>
+                              {hasMistake && (
+                                <span className="text-red-600 text-xs font-bold bg-red-50 px-2 py-0.5 rounded">실수 있음</span>
+                              )}
+                            </div>
+                            <span className="text-brand-500 text-sm font-bold bg-brand-50 px-2 py-1 rounded">해설 보기</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 w-full max-w-sm mx-auto mt-auto mb-6">
+                    <button onClick={() => setMode('menu')} className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-4 rounded-2xl shadow-md btn-press">
+                      ← 이전 화면으로
+                    </button>
+                    <button onClick={goHome} className="flex-1 bg-slate-300 hover:bg-slate-400 text-slate-700 font-bold py-4 rounded-2xl shadow-md btn-press">
+                      메인 메뉴로
+                    </button>
+                    <button onClick={resetGame} className="flex-1 bg-brand-500 hover:bg-brand-600 text-white font-bold py-4 rounded-2xl shadow-lg btn-press">
+                      다시하기
+                    </button>
+                  </div>
+                  <Footer />
+                </div>
+
+                {reviewIndex !== null && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-pop">
+                        <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative">
+                            <div className="p-4 bg-slate-50 border-b flex justify-between items-center shrink-0">
+                                <h3 className="font-bold text-xl text-slate-800">
+                                    {quizList[reviewIndex].name} <span className="text-slate-500">({quizList[reviewIndex].formula})</span>
+                                </h3>
+                                <button onClick={() => setReviewIndex(null)} className="p-2 hover:bg-slate-200 rounded-full bg-white border border-slate-200">✕</button>
+                            </div>
+                            <div className="p-4 overflow-y-auto">
+                                <div className="mb-6 pointer-events-none">
+                                    <PolarityWayMoleculeViewer 
+                                        data={quizList[reviewIndex]}
+                                        userAnswers={history[reviewIndex]} 
+                                        showResult={true}
+                                        onAnswerBond={() => {}}
+                                        errorBondId={null}
+                                        level={level}
+                                    />
+                                </div>
+                                <div className="clean-panel p-5 space-y-4">
+                                    <h4 className="font-bold text-slate-700 border-b pb-2 border-slate-200">💡 상세 해설</h4>
+                                    {quizList[reviewIndex].bonds.map((bond, idx) => {
+                                        const a1 = quizList[reviewIndex].atoms.find(a => a.id === bond.from);
+                                        const a2 = quizList[reviewIndex].atoms.find(a => a.id === bond.to);
+                                        const en1 = ELEMENTS[a1.el].en;
+                                        const en2 = ELEMENTS[a2.el].en;
+                                        const diff = Math.abs(en1 - en2).toFixed(1);
+                                        const isNonPolar = diff === "0.0";
+                                        
+                                        let explanationText = "";
+                                        if (isNonPolar) {
+                                            explanationText = `두 원자는 같은 종류(${a1.el})이므로 전기음성도 차이가 0입니다. 전자쌍이 치우치지 않아 부분 전하가 생기지 않는 무극성 공유결합입니다.`;
+                                        } else {
+                                            const stronger = en1 > en2 ? a1 : a2;
+                                            const weaker = en1 > en2 ? a2 : a1;
+                                            const sEn = ELEMENTS[stronger.el].en;
+                                            const wEn = ELEMENTS[weaker.el].en;
+                                            explanationText = `${stronger.el}(${sEn})와 ${weaker.el}(${wEn}) 중 전기음성도가 더 큰 ${stronger.el} 쪽으로 전자쌍이 쏠립니다. 따라서 ${stronger.el}는 δ-, ${weaker.el}는 δ+가 되며, 쌍극자 모멘트는 ${weaker.el} → ${stronger.el} 방향입니다.`;
+                                        }
+                                        return (
+                                            <div key={idx} className="text-sm text-slate-600 leading-relaxed">
+                                                <span className="font-bold text-slate-800 mr-2">{idx+1}. {a1.el}-{a2.el}:</span>
+                                                {explanationText}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+          );
+        }
+
+        return (
+          <div className="flex flex-col min-h-screen bg-slate-50 relative">
+            <header className="px-3 py-3 bg-white shadow-sm flex justify-between items-center z-10 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setMode('menu')} className="p-2 -ml-2 rounded-full hover:bg-slate-100 text-slate-500 btn-press" title="이전 화면으로">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                  </button>
+                  <button onClick={goHome} className="p-2 rounded-full hover:bg-slate-100 text-slate-500 btn-press" title="메인 메뉴로">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                  </button>
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    {level === 'beginner' ? '초급' : level === 'intermediate' ? '중급' : '상급'}
+                    {level === 'advanced' && (
+                      <span className={`font-mono text-base px-2 py-0.5 rounded ${showResult ? 'bg-slate-200 text-slate-500' : 'bg-red-100 text-red-600 animate-pulse-red'}`}>
+                        {showResult ? 'PAUSED' : formatTime(timer)}
+                      </span>
+                    )}
+                  </h1>
+                  <div className="text-xs text-slate-500 font-medium">문제 {step + 1} / {quizList.length}</div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button 
+                    onClick={() => setShowGuide(true)} 
+                    className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-2 rounded-lg font-bold flex items-center gap-1 transition-all shadow-sm hover:shadow"
+                >
+                    📘 힌트-원리
+                </button>
+                <button 
+                    onClick={() => setShowTable(true)} 
+                    className="text-xs bg-brand-50 border border-brand-200 text-brand-700 px-3 py-2 rounded-lg font-bold flex items-center gap-1 transition-all shadow-sm hover:shadow hover:bg-brand-100"
+                >
+                    📊 힌트-전기음성도 표
+                </button>
+              </div>
+            </header>
+
+            <main className="flex-1 overflow-y-auto p-2 pb-32 scrollbar-hide">
+              <div className="mb-2 text-center">
+                <h2 className="text-2xl font-bold text-slate-900 mb-1">{currentQuiz.name} <span className="text-slate-400 text-xl font-serif">({currentQuiz.formula})</span></h2>
+                <p className="text-xs text-slate-500">{currentQuiz.description}</p>
+              </div>
+
+              <div className="mb-2">
+                <PolarityWayMoleculeViewer 
+                  data={currentQuiz} 
+                  userAnswers={userAnswers} 
+                  showResult={showResult}
+                  onAnswerBond={handleAnswerBond}
+                  errorBondId={errorBondId}
+                  level={level}
+                />
+              </div>
+              
+              {!showResult && (
+                 <div className="flex justify-center gap-4 text-sm text-slate-500 mb-2 bg-slate-100 py-2 rounded-xl mx-1 shadow-sm">
+                    <div className="flex items-center gap-1"><span className="font-bold text-brand-600 text-lg">→</span> 극성</div>
+                    <div className="flex items-center gap-1"><span className="font-bold text-amber-500 text-lg">○</span> 무극성</div>
+                 </div>
+              )}
+
+              {showResult && (
+                <div className="clean-panel p-4 animate-pop">
+                  <h3 className="font-bold text-lg text-slate-800 mb-3 border-b pb-2 flex items-center gap-2">📝 상세 해설</h3>
+                  <ul className="space-y-4">
+                    {currentQuiz.bonds.map((bond, idx) => {
+                       const a1 = currentQuiz.atoms.find(a => a.id === bond.from);
+                       const a2 = currentQuiz.atoms.find(a => a.id === bond.to);
+                       const en1 = ELEMENTS[a1.el].en;
+                       const en2 = ELEMENTS[a2.el].en;
+                       const diff = Math.abs(en1 - en2).toFixed(1);
+                       const isNonPolar = diff === "0.0";
+                       
+                       let explanationText = "";
+                       if (isNonPolar) {
+                         explanationText = `두 원자의 종류가 같아 전기음성도 차이가 0입니다. 전자가 어느 한쪽으로 치우치지 않으므로 무극성 공유결합입니다.`;
+                       } else {
+                         const stronger = en1 > en2 ? a1 : a2;
+                         const weaker = en1 > en2 ? a2 : a1;
+                         const sEn = ELEMENTS[stronger.el].en;
+                         const wEn = ELEMENTS[weaker.el].en;
+                         explanationText = `${stronger.el}(${sEn})와 ${weaker.el}(${wEn}) 중 전기음성도가 더 큰 ${stronger.el} 쪽으로 전자쌍이 쏠립니다. 따라서 ${stronger.el}는 δ-, ${weaker.el}는 δ+가 되며, 쌍극자 모멘트는 ${weaker.el} → ${stronger.el} 방향입니다.`;
+                       }
+
+                       return (
+                         <li key={bond.id} className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                           <div className="flex justify-between items-center mb-2">
+                             <span className="font-bold text-base text-slate-800">{idx+1}. {a1.el} - {a2.el}</span>
+                             <span className={`text-xs font-bold px-3 py-1 rounded-full ${isNonPolar ? 'bg-amber-100 text-amber-700' : 'bg-brand-100 text-brand-700'}`}>
+                               {isNonPolar ? "무극성" : "극성"}
+                             </span>
+                           </div>
+                           <div className="text-slate-700 leading-relaxed text-sm">
+                             <div className="mb-1">전기음성도 차이: <strong className="text-slate-900 bg-slate-200 px-1.5 py-0.5 rounded">{diff}</strong></div>
+                             <div className="leading-5">{explanationText}</div>
+                           </div>
+                         </li>
+                       )
+                    })}
+                  </ul>
+                </div>
+              )}
+            </main>
+
+            <footer className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] safe-area-bottom flex gap-3">
+              {step > 0 && (
+                <button 
+                  onClick={prevStep}
+                  className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-lg font-bold py-4 rounded-2xl shadow-md btn-press"
+                >
+                  이전
+                </button>
+              )}
+
+              {showResult ? (
+                <button 
+                  onClick={nextStep}
+                  className="flex-[2] bg-brand-600 hover:bg-brand-700 text-white text-lg font-bold py-4 rounded-2xl shadow-lg btn-press flex items-center justify-center gap-2 animate-pop"
+                >
+                  다음 문제로 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+              ) : (
+                <div className="flex-[2] bg-slate-100 text-slate-400 text-base font-bold py-4 rounded-2xl flex items-center justify-center border border-slate-200">
+                  모든 결합을 확인하세요
+                </div>
+              )}
+            </footer>
+
+            {showTable && (
+              <ElectronegativityTable isOpen={showTable} onClose={() => setShowTable(false)} />
+            )}
+            
+            {showGuide && <UniversalGuide onClose={() => setShowGuide(false)} />}
+          </div>
+        );
+      };
+
+      // ======================================================================
+      // BasicPolarityQuiz 컴포넌트 (basicpolarity 퀴즈 전체 로직)
+      // ======================================================================
+      
+      const BasicPolarityQuiz = ({ onBack }) => {
+        const [gameStage, setGameStage] = useState('menu');
+        const [quizMolecules, setQuizMolecules] = useState([]);
+        const [moleculeIndex, setMoleculeIndex] = useState(0);
+        const [selectedBondId, setSelectedBondId] = useState(null);
+        const [userGuesses, setUserGuesses] = useState({});
+        const [showResults, setShowResults] = useState(false);
+        const [isTableOpen, setIsTableOpen] = useState(false);
+        const [instantCheck, setInstantCheck] = useState(true);
+        const [correctBonds, setCorrectBonds] = useState(new Set());
+        const [showHint, setShowHint] = useState(false);
+        const [expandedExplanations, setExpandedExplanations] = useState(new Set());
+
+        const currentMolecule = quizMolecules[moleculeIndex];
+
+        useEffect(() => {
+          if (!currentMolecule) return;
+          setUserGuesses({});
+          setSelectedBondId(null);
+          setShowResults(false);
+          setCorrectBonds(new Set());
+          setShowHint(false);
+          setExpandedExplanations(new Set());
+        }, [moleculeIndex, currentMolecule]);
+
+        const generateQuiz = (count) => {
+          const all = [...MOLECULES_BASIC];
+          const pureNonPolar = all.filter(m => ['h2', 'cl2'].includes(m.id));
+          const mixed = all.filter(m => ['h2o2', 'c2h2'].includes(m.id));
+          
+          const first = pureNonPolar[Math.floor(Math.random() * pureNonPolar.length)];
+          const last = mixed[Math.floor(Math.random() * mixed.length)];
+          
+          const pool = all.filter(m => m.id !== first.id && m.id !== last.id);
+          const middle = pool.sort(() => Math.random() - 0.5).slice(0, count - 2);
+          
+          return [first, ...middle, last];
+        };
+
+        const startGame = (count) => {
+          setQuizMolecules(generateQuiz(count));
+          setMoleculeIndex(0);
+          setGameStage('playing');
+        };
+
+        const handleAnswerSelect = (bondId, polarity) => {
+          setUserGuesses(prev => {
+            const newGuesses = { ...prev, [bondId]: polarity };
+            
+            if (instantCheck) {
+              const bond = currentMolecule.bonds.find(b => b.id === bondId);
+              if (bond) {
+                const a1 = currentMolecule.atoms.find(a => a.id === bond.sourceId);
+                const a2 = currentMolecule.atoms.find(a => a.id === bond.targetId);
+                const en1 = ELEMENTS[a1.symbol].en;
+                const en2 = ELEMENTS[a2.symbol].en;
+                const diff = Math.abs(en1 - en2);
+                const isPolarActual = diff > 0;
+                const correct = (isPolarActual && polarity === BondPolarity.POLAR) || (!isPolarActual && polarity === BondPolarity.NON_POLAR);
+                
+                if (correct) {
+                  setCorrectBonds(prev => new Set([...prev, bondId]));
+                  setTimeout(() => setSelectedBondId(null), 500);
+                } else {
+                  setCorrectBonds(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(bondId);
+                    return newSet;
+                  });
+                }
+              }
+            }
+            
+            return newGuesses;
+          });
+        };
+
+        const checkAnswers = () => {
+          if (!currentMolecule.bonds.every(b => userGuesses[b.id])) {
+            alert("모든 번호의 결합에 대해 정답을 선택해주세요!");
+            return;
+          }
+          setShowResults(true);
+          setSelectedBondId(null);
+        };
+
+        const nextMolecule = () => {
+            if (moleculeIndex + 1 >= quizMolecules.length) {
+                onBack();
+            } else {
+                setMoleculeIndex((prev) => prev + 1);
+            }
+        };
+
+        const isAllCorrect = useMemo(() => {
+          if (!showResults || !currentMolecule) return false;
+          return currentMolecule.bonds.every(bond => {
+            const a1 = currentMolecule.atoms.find(a => a.id === bond.sourceId);
+            const a2 = currentMolecule.atoms.find(a => a.id === bond.targetId);
+            const diff = Math.abs(ELEMENTS[a1.symbol].en - ELEMENTS[a2.symbol].en);
+            const actual = diff > 0 ? BondPolarity.POLAR : BondPolarity.NON_POLAR;
+            return userGuesses[bond.id] === actual;
+          });
+        }, [showResults, currentMolecule, userGuesses]);
+
+        if (gameStage === 'menu') {
+           return (
+             <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+                <div className="clean-panel p-8 max-w-md w-full text-center slide-up">
+                   <div className="inline-flex p-4 bg-indigo-100 text-indigo-600 rounded-full mb-6"><Icons.Atom size={48} /></div>
+                   <h1 className="text-3xl font-bold text-slate-900 mb-2">결합의 극성 퀴즈</h1>
+                   <p className="text-slate-500 mb-8">고등학교 화학 수준 퀴즈</p>
+                   <div className="space-y-4">
+                       <button onClick={() => startGame(4)} className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md btn-press flex items-center justify-center gap-3 text-lg"><Icons.Play size={24} fill="currentColor"/> 4문제 풀기 (핵심)</button>
+                       <button onClick={() => startGame(8)} className="w-full py-4 px-6 bg-white border-2 border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-bold btn-press flex items-center justify-center gap-3"><Icons.ListFilter size={20}/> 8문제 풀기 (전체)</button>
+                   </div>
+                </div>
+                <div className="mt-8 w-full flex flex-col items-center">
+                  <button onClick={onBack} className="w-full max-w-md bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-xl shadow-md btn-press">
+                    ← 메인 메뉴로
+                  </button>
+                  <Footer />
+                </div>
+             </div>
+           );
+        }
+
+        const selectedBond = selectedBondId ? currentMolecule.bonds.find(b => b.id === selectedBondId) : null;
+        const selectedAtoms = selectedBond ? { 
+           a1: currentMolecule.atoms.find(a => a.id === selectedBond.sourceId), 
+           a2: currentMolecule.atoms.find(a => a.id === selectedBond.targetId) 
+        } : null;
+
+        return (
+          <div className="min-h-screen bg-slate-50 flex flex-col items-center py-6 px-4">
+             <header className="w-full max-w-5xl flex flex-col md:flex-row justify-between items-center mb-6 clean-panel p-4 gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setGameStage('menu')} className="p-2 rounded-full hover:bg-slate-100 text-slate-500 btn-press" title="이전 화면으로">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    </button>
+                    <button onClick={onBack} className="p-2 rounded-full hover:bg-slate-100 text-slate-500 btn-press" title="메인 메뉴로">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="bg-indigo-600 p-2.5 rounded-lg text-white shadow-md"><Icons.Atom size={26} /></div>
+                    <div><h1 className="text-xl md:text-2xl font-bold text-slate-900">결합의 극성 퀴즈</h1></div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setShowHint(!showHint)} className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-lg font-bold text-sm text-blue-700 btn-press">
+                    <Icons.HelpCircle size={18}/> 힌트
+                  </button>
+                  <button onClick={() => setIsTableOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg font-bold text-sm text-slate-700 btn-press"><Icons.TableProperties size={18}/> 전기음성도 표</button>
+                </div>
+             </header>
+
+             {showHint && (
+               <div className="w-full max-w-5xl mb-4 clean-panel p-4 bg-blue-50 border-2 border-blue-200 fade-in">
+                 <div className="flex items-start gap-3">
+                   <Icons.Info size={20} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                   <div className="text-sm text-blue-800 leading-relaxed">
+                     <p className="font-bold mb-1">💡 힌트</p>
+                     <p>같은 종류의 원자가 공유 결합을 형성하면 전기 음성도 차이가 0이므로 무극성 공유 결합입니다. 다른 종류의 원자가 공유 결합을 형성하면 전기 음성도가 큰 원자 쪽으로 공유 전자쌍이 치우치므로 극성 공유 결합입니다.</p>
+                   </div>
+                   <button onClick={() => setShowHint(false)} className="ml-auto text-blue-600 hover:text-blue-800 btn-press">
+                     <Icons.X size={18} />
+                   </button>
+                 </div>
+               </div>
+             )}
+             <main className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-6">
+               <div className="lg:col-span-7 flex flex-col gap-4">
+                 <div className="clean-panel p-1 overflow-hidden">
+                    <div className="flex justify-between px-6 py-4 items-center bg-slate-50/50 border-b border-slate-100">
+                       <h2 className="text-2xl font-bold text-slate-800">{currentMolecule.name} <span className="text-slate-400 font-normal text-lg font-serif italic">{currentMolecule.formula}</span></h2>
+                       <span className="text-xs font-bold font-mono bg-slate-200 text-slate-600 px-3 py-1 rounded-full">Quiz {moleculeIndex + 1} / {quizMolecules.length}</span>
+                    </div>
+                    <div className="p-4">
+                       <BasicPolarityMoleculeViewer 
+                         molecule={currentMolecule} 
+                         selectedBondId={selectedBondId} 
+                         onBondClick={setSelectedBondId} 
+                         userGuesses={userGuesses} 
+                         showResults={showResults}
+                         onAnswerSelect={handleAnswerSelect}
+                         correctBonds={correctBonds}
+                       />
+                    </div>
+                    <div className="bg-slate-50 px-4 py-3 text-center text-sm text-slate-500 border-t border-slate-100 flex items-center justify-center gap-2">
+                       <Icons.HelpCircle size={14} /> {!showResults ? "결합 번호를 클릭해 문제를 푸세요." : "결과 화면입니다. 빨간 화살표는 쌍극자 모멘트입니다."}
+                    </div>
+                 </div>
+               </div>
+
+               <div className="lg:col-span-5 flex flex-col gap-4">
+                  <div className="clean-panel p-5 flex-1 flex flex-col">
+                     <h3 className="text-sm font-bold text-slate-500 mb-4 uppercase tracking-wide">결합별 답안</h3>
+                     
+                     {!showResults ? (
+                       <div className="space-y-3 flex-1 overflow-y-auto">
+                          {currentMolecule.bonds.map((bond, idx) => {
+                            const a1 = currentMolecule.atoms.find(a => a.id === bond.sourceId);
+                            const a2 = currentMolecule.atoms.find(a => a.id === bond.targetId);
+                            const guess = userGuesses[bond.id];
+                            const isSelected = selectedBondId === bond.id;
+                            
+                            return (
+                              <div key={bond.id} className={`border-2 rounded-lg p-3 transition-all ${isSelected ? 'border-indigo-500 bg-indigo-50 shadow-md' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition-all ${isSelected ? 'bg-indigo-600 text-white scale-110' : 'bg-slate-200 text-slate-600'}`}>
+                                      {idx + 1}
+                                    </div>
+                                    <span className="font-serif font-bold text-slate-700">{a1.symbol} - {a2.symbol}</span>
+                                  </div>
+                                  {guess && (
+                                    <span className={`text-xs font-bold px-2 py-1 rounded ${guess === BondPolarity.POLAR ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
+                                      {guess === BondPolarity.POLAR ? '⚡ 극성 공유결합' : '⚖ 무극성 공유결합'}
+                                    </span>
+                                  )}
+                            </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button 
+                                    onClick={() => {
+                                      setSelectedBondId(bond.id);
+                                      handleAnswerSelect(bond.id, BondPolarity.POLAR);
+                                    }}
+                                    className={`btn-press px-2 py-2 rounded-lg text-xs md:text-sm font-bold transition-all leading-tight ${guess === BondPolarity.POLAR ? 'bg-indigo-500 text-white shadow-md ring-2 ring-indigo-300' : 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'}`}
+                                  >
+                                    ⚡ 극성 공유결합
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      setSelectedBondId(bond.id);
+                                      handleAnswerSelect(bond.id, BondPolarity.NON_POLAR);
+                                    }}
+                                    className={`btn-press px-2 py-2 rounded-lg text-xs md:text-sm font-bold transition-all leading-tight ${guess === BondPolarity.NON_POLAR ? 'bg-amber-500 text-white shadow-md ring-2 ring-amber-300' : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'}`}
+                                  >
+                                    ⚖ 무극성 공유결합
+                                  </button>
+                            </div>
+                         </div>
+                            );
+                          })}
+                       </div>
+                     ) : (
+                       <div className="space-y-3 flex-1 overflow-y-auto">
+                          {currentMolecule.bonds.map((bond, idx) => {
+                            const a1 = currentMolecule.atoms.find(a => a.id === bond.sourceId);
+                            const a2 = currentMolecule.atoms.find(a => a.id === bond.targetId);
+                            const guess = userGuesses[bond.id];
+                            const en1 = ELEMENTS[a1.symbol].en;
+                            const en2 = ELEMENTS[a2.symbol].en;
+                            const diff = Math.abs(en1 - en2);
+                            const isPolarActual = diff > 0;
+                            const correct = (isPolarActual && guess === BondPolarity.POLAR) || (!isPolarActual && guess === BondPolarity.NON_POLAR);
+                            const correctAnswer = isPolarActual ? BondPolarity.POLAR : BondPolarity.NON_POLAR;
+                            
+                            return (
+                              <div key={bond.id} className={`border-2 rounded-lg p-3 transition-all ${correct ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'}`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${correct ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+                                      {idx + 1}
+                                    </div>
+                                    <span className="font-serif font-bold text-slate-700">{a1.symbol} - {a2.symbol}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {correct ? (
+                                      <span className="text-green-700 font-bold text-sm flex items-center gap-1">
+                                        <Icons.CheckCircle size={16} /> 정답
+                                      </span>
+                                    ) : (
+                                      <span className="text-red-700 font-bold text-sm">✗ 오답</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-slate-600">내 답:</span>
+                                    <span className={`font-bold ${guess === BondPolarity.POLAR ? 'text-indigo-700' : 'text-amber-700'}`}>
+                                      {guess === BondPolarity.POLAR ? '⚡ 극성 공유결합' : '⚖ 무극성 공유결합'}
+                                    </span>
+                                  </div>
+                                  {!correct && (
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <span className="text-slate-600">정답:</span>
+                                      <span className={`font-bold ${correctAnswer === BondPolarity.POLAR ? 'text-indigo-700' : 'text-amber-700'}`}>
+                                        {correctAnswer === BondPolarity.POLAR ? '⚡ 극성 공유결합' : '⚖ 무극성 공유결합'}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div className="text-xs text-slate-500 mt-1">
+                                    전기음성도: {a1.symbol} {en1.toFixed(1)}, {a2.symbol} {en2.toFixed(1)} (차이: {diff.toFixed(1)})
+                                  </div>
+                                  <button 
+                                    onClick={() => {
+                                      setExpandedExplanations(prev => {
+                                        const newSet = new Set(prev);
+                                        if (newSet.has(bond.id)) {
+                                          newSet.delete(bond.id);
+                                        } else {
+                                          newSet.add(bond.id);
+                                        }
+                                        return newSet;
+                                      });
+                                    }}
+                                    className="mt-2 w-full py-2 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-lg text-xs font-bold btn-press flex items-center justify-center gap-1 border border-violet-200 transition-all"
+                                  >
+                                    <Icons.BookOpen size={14}/>
+                                    {expandedExplanations.has(bond.id) ? '해설 닫기' : '이 결합 상세해설 보기'}
+                                  </button>
+                                  {expandedExplanations.has(bond.id) && renderBondExplanationContent(currentMolecule, bond, idx)}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          
+                          <div className={`text-center p-4 rounded-xl mt-4 ${isAllCorrect ? 'bg-green-50 text-green-800 border-2 border-green-200' : 'bg-red-50 text-red-800 border-2 border-red-200'}`}>
+                             <h3 className="text-lg font-bold">{isAllCorrect ? "정답입니다! 👏" : "아쉽네요! 😅"}</h3>
+                          </div>
+                          
+                          <div className="grid grid-cols-3 gap-2 mt-4">
+                            <button onClick={() => setGameStage('menu')} className="w-full py-3.5 rounded-xl font-bold btn-press flex items-center justify-center gap-1 bg-slate-200 text-slate-700 hover:bg-slate-300 text-sm">
+                              ← 이전 화면
+                            </button>
+                            <button onClick={() => setShowResults(false)} className="w-full py-3.5 rounded-xl font-bold btn-press flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 text-sm">
+                              다시 도전
+                            </button>
+                            <button onClick={() => nextMolecule()} className={`w-full py-3.5 rounded-xl font-bold btn-press flex items-center justify-center gap-2 bg-slate-900 text-white hover:bg-slate-800 text-sm`}>
+                              {moleculeIndex + 1 >= quizMolecules.length ? '메인 메뉴' : '다음 문제'}
+                            </button>
+                          </div>
+                       </div>
+                     )}
+                  </div>
+                  
+                  {!showResults && (
+                    <button onClick={checkAnswers} className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl shadow-lg btn-press flex items-center justify-center gap-2">
+                      <Icons.CheckCircle size={20}/> 정답 확인하기
+                    </button>
+                  )}
+               </div>
+             </main>
+             <ElectronegativityTable isOpen={isTableOpen} onClose={() => setIsTableOpen(false)} />
+             <Footer />
+          </div>
+        );
+      };
+
+      // ======================================================================
+      // 메인 App 컴포넌트 (라우팅 포함)
+      // ======================================================================
+      
+      const App = () => {
+        return <PolarityWayQuiz onBack={() => { /* standalone: no-op */ }} />;
+      };
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
