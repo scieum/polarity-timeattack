@@ -235,7 +235,7 @@
       }
 
       // 리더보드 한 행 컴포넌트 (참조 이미지 스타일)
-      function LeaderboardRow({ row, isMe, formatTime }) {
+      function LeaderboardRow({ row, isMe, formatTime, onClick }) {
         const rank = row.rank;
         const medalMap = { 1: '🥇', 2: '🥈', 3: '🥉' };
         const bgMap = {
@@ -244,11 +244,16 @@
           3: 'bg-orange-50 border-orange-200'
         };
         const rowClass = isMe
-          ? 'bg-purple-100 border-purple-300'
+          ? 'bg-blue-50 border-blue-300'
           : (bgMap[rank] || 'bg-white border-slate-200');
+        const clickable = typeof onClick === 'function' && row.attempts;
+        const Wrapper = clickable ? 'button' : 'div';
         return (
-          <div className={`flex items-center gap-3 px-4 py-3 border rounded-xl ${rowClass}`}>
-            <div className="shrink-0 w-10 h-10 rounded-full bg-white border border-slate-200 flex flex-col items-center justify-center shadow-sm">
+          <Wrapper
+            onClick={clickable ? onClick : undefined}
+            className={`w-full text-left flex items-center gap-3 px-4 py-3 border rounded-xl ${rowClass} ${clickable ? 'hover:shadow-sm transition-shadow' : ''}`}
+          >
+            <div className="shrink-0 w-10 h-10 rounded-full bg-white border border-slate-200 flex flex-col items-center justify-center">
               {medalMap[rank] ? (
                 <>
                   <span className="text-lg leading-none">{medalMap[rank]}</span>
@@ -261,16 +266,19 @@
             <div className="flex-1 min-w-0">
               <div className="font-bold text-slate-800 flex items-center gap-1 truncate">
                 <span className="truncate">{row.nickname || '익명'}</span>
-                {isMe && <span className="text-[10px] bg-purple-500 text-white px-1.5 py-0.5 rounded">나</span>}
+                {isMe && <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded">나</span>}
               </div>
               <div className="text-xs text-slate-500 truncate">{row.school_name || '학교 미등록'}</div>
             </div>
             <div className="shrink-0 text-right">
-              <div className="text-lg font-extrabold text-slate-800 leading-none">{row.mistakes}<span className="text-xs font-bold text-slate-500 ml-1">실수</span></div>
+              <div className="text-lg font-extrabold leading-none">
+                <span className="text-red-500">{row.mistakes}</span>
+                <span className="text-xs font-bold text-red-500 ml-1">miss</span>
+              </div>
               <div className="text-xs font-mono text-slate-500 mt-0.5">{formatTime(row.time_seconds)}</div>
               <div className="text-[10px] text-slate-400 mt-0.5">{relativeTime(row.updated_at)}</div>
             </div>
-          </div>
+          </Wrapper>
         );
       }
 
@@ -1547,6 +1555,7 @@
         const [modalTopList, setModalTopList] = useState([]);
         const [modalBusy, setModalBusy] = useState(false);
         const [modalScope, setModalScope] = useState('all'); // 'all' | 'school'
+        const [attemptDetail, setAttemptDetail] = useState(null); // row clicked on modal
 
         // 학교 검색 상태 (등록 플로우)
         const [regSchoolKind, setRegSchoolKind] = useState('고등학교');
@@ -1662,11 +1671,19 @@
           if (!rankingUser) return null;
           setLeaderboardBusy(true);
           try {
+            const attempts = quizList.map((q, idx) => ({
+              id: q.id,
+              name: q.name,
+              formula: q.formula,
+              missed: !!(mistakeHistory[idx] && mistakeHistory[idx].length > 0),
+              miss_count: mistakeHistory[idx] ? mistakeHistory[idx].length : 0
+            }));
             const result = await rpc('submit_score', {
               p_nickname: rankingUser.nickname,
               p_pin_hash: rankingUser.pinHash,
               p_mistakes: mistakeCount,
-              p_time_seconds: timer
+              p_time_seconds: timer,
+              p_attempts: attempts
             });
             setSubmitResult(result || null);
             const [top, nb] = await Promise.all([
@@ -1830,16 +1847,70 @@
                     </div>
                   )}
                   {!modalBusy && modalTopList.map(row => (
-                    <LeaderboardRow key={row.rank} row={row} isMe={rankingUser && row.nickname === rankingUser.nickname} formatTime={formatTime} />
+                    <LeaderboardRow
+                      key={row.rank}
+                      row={row}
+                      isMe={rankingUser && row.nickname === rankingUser.nickname}
+                      formatTime={formatTime}
+                      onClick={() => setAttemptDetail(row)}
+                    />
                   ))}
                 </div>
                 <div className="p-4 border-t border-slate-200">
-                  <button onClick={() => setShowLeaderboardModal(false)}
+                  <button onClick={() => { setShowLeaderboardModal(false); setAttemptDetail(null); }}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 rounded-xl btn-press">
                     닫기
                   </button>
                 </div>
               </div>
+              {attemptDetail && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-pop">
+                  <div className="bg-white rounded-2xl w-full max-w-sm max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+                    <div className="p-5 border-b border-slate-200 text-center">
+                      <h3 className="font-bold text-lg text-slate-900 tracking-tight">{attemptDetail.nickname}</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">{attemptDetail.school_name || '학교 미등록'}</p>
+                      <div className="mt-2 flex items-center justify-center gap-3 text-sm">
+                        <span className="text-red-500 font-extrabold">{attemptDetail.mistakes}<span className="text-xs ml-0.5">miss</span></span>
+                        <span className="text-slate-300">·</span>
+                        <span className="font-mono text-slate-600">{formatTime(attemptDetail.time_seconds)}</span>
+                      </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50">
+                      {(!attemptDetail.attempts || attemptDetail.attempts.length === 0) ? (
+                        <div className="text-center text-slate-400 text-sm py-8">
+                          출제 문항 정보가 없습니다.<br/>
+                          <span className="text-[11px]">(구버전 기록일 수 있음)</span>
+                        </div>
+                      ) : (
+                        attemptDetail.attempts.map((a, i) => (
+                          <div key={i} className={`flex items-center justify-between px-4 py-3 border rounded-xl bg-white ${a.missed ? 'border-red-200' : 'border-slate-200'}`}>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-slate-900 text-sm truncate">
+                                Q{i+1}. {a.name} <span className="text-slate-400 text-xs font-normal">({a.formula})</span>
+                              </div>
+                            </div>
+                            {a.missed ? (
+                              <span className="shrink-0 text-[11px] font-bold text-red-500 bg-red-50 border border-red-200 px-2 py-0.5 rounded">
+                                {a.miss_count || 1} miss
+                              </span>
+                            ) : (
+                              <span className="shrink-0 text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                                clean
+                              </span>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="p-4 border-t border-slate-200">
+                      <button onClick={() => setAttemptDetail(null)}
+                        className="w-full border border-slate-200 hover:border-slate-300 bg-white text-slate-900 font-semibold py-3 rounded-xl btn-press">
+                        닫기
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )
         );
@@ -2029,8 +2100,8 @@
                         <span className="font-mono text-lg font-semibold text-slate-900">{formatTime(timer)}</span>
                       </div>
                       <div className="flex items-center justify-between pt-3">
-                        <span className="text-sm font-medium text-slate-500">실수 횟수</span>
-                        <span className="font-mono text-lg font-semibold text-slate-900">{mistakeCount}회</span>
+                        <span className="text-sm font-medium text-slate-500">miss</span>
+                        <span className="font-mono text-lg font-extrabold text-red-500">{mistakeCount}</span>
                       </div>
                     </div>
                   )}
@@ -2044,8 +2115,8 @@
                               <p className="font-semibold text-slate-900">새 기록 달성</p>
                               {submitResult.prev_mistakes !== null ? (
                                 <p className="text-xs text-slate-500 mt-1">
-                                  이전 {submitResult.prev_mistakes}실수·{formatTime(submitResult.prev_time)} →
-                                  <span className="ml-1 font-semibold text-slate-900">{submitResult.best_mistakes}실수·{formatTime(submitResult.best_time)}</span>
+                                  이전 <span className="text-red-500 font-semibold">{submitResult.prev_mistakes} miss</span>·{formatTime(submitResult.prev_time)} →
+                                  <span className="ml-1 font-semibold"><span className="text-red-500">{submitResult.best_mistakes} miss</span>·{formatTime(submitResult.best_time)}</span>
                                 </p>
                               ) : (
                                 <p className="text-xs text-slate-500 mt-1">첫 기록이 등록되었습니다</p>
@@ -2055,7 +2126,7 @@
                             <div>
                               <p className="font-semibold text-slate-900">기존 최고 기록이 더 좋아요</p>
                               <p className="text-xs text-slate-500 mt-1">
-                                최고 <span className="font-semibold text-slate-900">{submitResult.best_mistakes}실수·{formatTime(submitResult.best_time)}</span>
+                                최고 <span className="font-semibold"><span className="text-red-500">{submitResult.best_mistakes} miss</span>·{formatTime(submitResult.best_time)}</span>
                               </p>
                             </div>
                           )}
@@ -2089,7 +2160,7 @@
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-slate-900">Q{idx + 1}. {quiz.name} <span className="text-slate-400 text-sm font-normal">({quiz.formula})</span></span>
                               {hasMistake && (
-                                <span className="text-slate-500 text-[11px] font-medium bg-slate-100 px-1.5 py-0.5 rounded">실수 있음</span>
+                                <span className="text-red-500 text-[11px] font-bold bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">miss</span>
                               )}
                             </div>
                             <span className="text-slate-500 text-xs font-medium">해설 →</span>
